@@ -1,0 +1,1467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <title>Distilling the Stream: Kafka-Backed Elixir at Scale</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:wght@400;500;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    /* ============================================
+       DESIGN TOKENS
+       ============================================ */
+    :root {
+      --bg-deep:      #0A0B12;
+      --bg-surface:   #12132A;
+      --bg-elevated:  #1A1B36;
+      --accent:       #7C5CFC;
+      --accent-warm:  #E8A838;
+      --accent-green: #5CE8B4;
+      --accent-red:   #F06060;
+      --text-primary: #EEEEF0;
+      --text-body:    #C0C0D8;
+      --text-secondary: #8B8BA0;
+      --text-dim:     #555568;
+      --radius:       10px;
+      --font-display: 'Sora', 'Helvetica Neue', sans-serif;
+      --font-body:    'DM Sans', 'Helvetica Neue', sans-serif;
+      --font-mono:    'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+    }
+
+    /* ============================================
+       RESET
+       ============================================ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font-body);
+      background: #060608;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* ============================================
+       SLIDE SYSTEM
+       ============================================ */
+    .slide {
+      width: 1280px;
+      height: 720px;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 60px 80px;
+      margin: 0 auto 4px auto;
+      background: var(--bg-deep);
+      color: var(--text-primary);
+      page-break-after: always;
+    }
+
+    /* Content above grain + background layers */
+    .slide > * {
+      position: relative;
+      z-index: 2;
+    }
+
+    /* Grain texture overlay */
+    .slide::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      pointer-events: none;
+      opacity: 0.03;
+      background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      mix-blend-mode: overlay;
+    }
+
+    .slide-number {
+      position: absolute;
+      bottom: 24px;
+      right: 40px;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      color: var(--text-dim);
+      z-index: 2;
+    }
+
+    .slide-footer {
+      position: absolute;
+      bottom: 24px;
+      left: 40px;
+      font-family: var(--font-display);
+      font-size: 13px;
+      color: var(--text-dim);
+      letter-spacing: 0.08em;
+      z-index: 2;
+    }
+
+    /* ============================================
+       TYPOGRAPHY — Conference-scale
+       ============================================ */
+    .slide h2 {
+      font-family: var(--font-display);
+      font-size: 44px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 32px;
+      line-height: 1.15;
+      letter-spacing: -0.01em;
+    }
+
+    .slide h2 .accent { color: var(--accent); }
+    .slide h2 .accent-warm { color: var(--accent-warm); }
+
+    .slide p {
+      font-size: 26px;
+      color: var(--text-body);
+      line-height: 1.55;
+      max-width: 1000px;
+    }
+
+    .slide ul {
+      list-style: none;
+      margin-top: 8px;
+    }
+
+    .slide ul li {
+      font-size: 26px;
+      color: var(--text-body);
+      line-height: 1.45;
+      padding: 10px 0;
+      padding-left: 32px;
+      position: relative;
+    }
+
+    .slide ul li::before {
+      content: '\2192';
+      position: absolute;
+      left: 0;
+      color: var(--accent);
+      font-weight: 700;
+    }
+
+    .slide ul li strong {
+      color: var(--text-primary);
+    }
+
+    /* ============================================
+       TITLE SLIDE
+       ============================================ */
+    .slide.title-slide {
+      background: var(--bg-deep);
+      justify-content: center;
+    }
+
+    .slide.title-slide::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(ellipse at 15% 85%, rgba(124,92,252,0.12) 0%, transparent 50%),
+        radial-gradient(ellipse at 85% 25%, rgba(124,92,252,0.06) 0%, transparent 45%),
+        radial-gradient(ellipse at 50% 50%, rgba(20,20,50,0.4) 0%, transparent 70%);
+      animation: titleGlow 8s ease-in-out infinite alternate;
+    }
+
+    @keyframes titleGlow {
+      0% { opacity: 0.7; }
+      100% { opacity: 1; }
+    }
+
+    .slide.title-slide h1 {
+      font-family: var(--font-display);
+      font-size: 64px;
+      font-weight: 800;
+      line-height: 1.05;
+      color: var(--text-primary);
+      max-width: 800px;
+      letter-spacing: -0.02em;
+    }
+
+    .slide.title-slide h1 span {
+      color: var(--accent);
+    }
+
+    .slide.title-slide .subtitle {
+      font-family: var(--font-display);
+      font-size: 26px;
+      color: var(--text-secondary);
+      margin-top: 20px;
+      font-weight: 400;
+      letter-spacing: 0.02em;
+    }
+
+    .slide.title-slide .speakers {
+      font-family: var(--font-display);
+      font-size: 20px;
+      color: var(--accent);
+      margin-top: 48px;
+      font-weight: 600;
+    }
+
+    .slide.title-slide .conference {
+      font-family: var(--font-mono);
+      font-size: 14px;
+      color: var(--text-dim);
+      margin-top: 8px;
+      letter-spacing: 0.03em;
+    }
+
+    /* ============================================
+       SECTION DIVIDER
+       ============================================ */
+    .slide.divider {
+      background: var(--accent);
+      align-items: flex-start;
+      justify-content: flex-end;
+      padding-bottom: 80px;
+    }
+
+    .slide.divider::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      background:
+        radial-gradient(ellipse at 80% 20%, rgba(255,255,255,0.08) 0%, transparent 50%),
+        radial-gradient(ellipse at 20% 80%, rgba(0,0,0,0.15) 0%, transparent 50%);
+      pointer-events: none;
+    }
+
+    .slide.divider::after {
+      opacity: 0.02;
+    }
+
+    .slide.divider .pillar-number {
+      font-family: var(--font-display);
+      font-size: 200px;
+      font-weight: 900;
+      color: rgba(255,255,255,0.08);
+      position: absolute;
+      top: -30px;
+      right: 50px;
+      line-height: 1;
+      z-index: 1;
+    }
+
+    .slide.divider h2 {
+      font-size: 56px;
+      font-weight: 800;
+      color: #fff;
+      line-height: 1.08;
+      max-width: 700px;
+    }
+
+    .slide.divider .divider-sub {
+      font-size: 22px;
+      color: rgba(255,255,255,0.65);
+      margin-top: 16px;
+      font-weight: 400;
+    }
+
+    .slide.divider .divider-byline {
+      font-size: 15px;
+      color: rgba(255,255,255,0.35);
+      margin-top: 24px;
+      font-family: var(--font-mono);
+      letter-spacing: 0.03em;
+    }
+
+    /* ============================================
+       INCIDENT SLIDE
+       ============================================ */
+    .slide.incident {
+      background: var(--bg-deep);
+      border-left: 6px solid var(--accent-warm);
+    }
+
+    .slide.incident::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      background: radial-gradient(ellipse at 0% 50%, rgba(232,168,56,0.04) 0%, transparent 50%);
+    }
+
+    .slide.incident .incident-label {
+      font-family: var(--font-mono);
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      color: var(--accent-warm);
+      text-transform: uppercase;
+      margin-bottom: 24px;
+    }
+
+    .slide.incident h2 {
+      font-size: 40px;
+      color: var(--text-primary);
+    }
+
+    .slide.incident blockquote {
+      font-size: 30px;
+      color: #E0E0E8;
+      font-style: italic;
+      border-left: none;
+      margin-top: 28px;
+      line-height: 1.45;
+      font-family: var(--font-body);
+    }
+
+    /* ============================================
+       CODE SLIDE
+       ============================================ */
+    .slide.code-slide {
+      padding: 48px 64px;
+    }
+
+    .slide.code-slide h2 {
+      font-size: 34px;
+      margin-bottom: 20px;
+    }
+
+    pre {
+      background: var(--bg-elevated);
+      border-radius: var(--radius);
+      padding: 24px 28px;
+      overflow: hidden;
+      font-family: var(--font-mono);
+      font-size: 20px;
+      line-height: 1.6;
+      color: var(--text-body);
+      border: 1px solid rgba(124,92,252,0.08);
+    }
+
+    .kw  { color: #C792EA; }
+    .fn  { color: #82AAFF; }
+    .st  { color: #C3E88D; }
+    .cm  { color: #546E7A; font-style: italic; }
+    .nm  { color: #F78C6C; }
+    .hl  { background: rgba(124,92,252,0.2); border-radius: 3px; padding: 1px 5px; }
+    .op  { color: #89DDFF; }
+
+    /* Side-by-side code */
+    .code-columns {
+      display: flex;
+      gap: 24px;
+    }
+
+    .code-col { flex: 1; }
+
+    .code-col h3 {
+      font-family: var(--font-display);
+      font-size: 15px;
+      color: var(--text-secondary);
+      margin-bottom: 10px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .code-col pre {
+      font-size: 17px;
+      line-height: 1.55;
+      padding: 20px 24px;
+    }
+
+    .code-caption {
+      margin-top: 20px;
+      font-size: 20px;
+      color: var(--text-secondary);
+    }
+
+    /* ============================================
+       TAKEAWAY SLIDE
+       ============================================ */
+    .slide.takeaway {
+      background: linear-gradient(135deg, #F7F7FB 0%, #EEEEF8 100%);
+      color: #1a1a2e;
+    }
+
+    .slide.takeaway::after {
+      mix-blend-mode: multiply;
+      opacity: 0.012;
+    }
+
+    .slide.takeaway::before {
+      content: '\201C';
+      position: absolute;
+      top: 30px;
+      right: 70px;
+      font-size: 320px;
+      line-height: 1;
+      color: rgba(124,92,252,0.05);
+      font-family: Georgia, serif;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .slide.takeaway h2 {
+      color: #1a1a2e;
+      font-size: 34px;
+    }
+
+    .slide.takeaway .takeaway-text {
+      font-family: var(--font-display);
+      font-size: 36px;
+      font-weight: 700;
+      color: var(--accent);
+      margin-top: 20px;
+      line-height: 1.35;
+      max-width: 900px;
+    }
+
+    .slide.takeaway p {
+      color: #555;
+    }
+
+    /* ============================================
+       ACTION SLIDE (What Changes Monday)
+       ============================================ */
+    .action-items {
+      display: flex;
+      flex-direction: column;
+      gap: 28px;
+      margin-top: 8px;
+    }
+
+    .action-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 24px;
+    }
+
+    .action-num {
+      font-family: var(--font-mono);
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--accent-warm);
+      padding-top: 6px;
+      flex-shrink: 0;
+    }
+
+    .action-item h3 {
+      font-family: var(--font-display);
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--text-primary);
+      line-height: 1.25;
+      margin-bottom: 6px;
+    }
+
+    .action-item p {
+      font-size: 21px;
+      color: var(--text-secondary);
+      line-height: 1.4;
+    }
+
+    /* ============================================
+       STACK DIAGRAM
+       ============================================ */
+    .stack-layers {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .stack-layer {
+      background: var(--bg-elevated);
+      border-radius: 8px;
+      padding: 16px 28px;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      border-left: 4px solid var(--accent);
+    }
+
+    .stack-layer.app-layer {
+      background: transparent;
+      border: 2px dashed rgba(124,92,252,0.25);
+      border-left: 2px dashed rgba(124,92,252,0.25);
+    }
+
+    .stack-layer.dim {
+      border-left-color: #2a2a40;
+      opacity: 0.55;
+    }
+
+    .stack-layer h3 {
+      font-family: var(--font-display);
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--text-primary);
+      min-width: 150px;
+    }
+
+    .stack-layer p {
+      font-size: 19px;
+      color: var(--text-secondary);
+    }
+
+    /* ============================================
+       REBALANCE DIAGRAM
+       ============================================ */
+    .rb-diagram {
+      margin-top: 20px;
+      background: var(--bg-elevated);
+      border-radius: var(--radius);
+      padding: 24px 28px;
+      border: 1px solid rgba(124,92,252,0.08);
+    }
+
+    .rb-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin: 6px 0;
+    }
+
+    .rb-label {
+      font-family: var(--font-mono);
+      font-size: 14px;
+      color: var(--text-secondary);
+      min-width: 120px;
+      text-align: right;
+    }
+
+    .rb-bars {
+      display: flex;
+      flex: 1;
+      gap: 3px;
+      height: 42px;
+    }
+
+    .rb-bar {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-family: var(--font-mono);
+      border-radius: 4px;
+      padding: 0 14px;
+      white-space: nowrap;
+    }
+
+    .rb-bar.processing {
+      background: rgba(124,92,252,0.2);
+      border: 1px solid rgba(124,92,252,0.35);
+      color: var(--accent);
+    }
+
+    .rb-bar.dead {
+      background: rgba(240,96,96,0.12);
+      border: 1px solid rgba(240,96,96,0.25);
+      color: var(--accent-red);
+    }
+
+    .rb-bar.idle {
+      background: rgba(255,255,255,0.02);
+      border: 1px solid rgba(255,255,255,0.06);
+      color: var(--text-dim);
+    }
+
+    .rb-event {
+      text-align: center;
+      font-size: 16px;
+      color: var(--accent-warm);
+      padding: 14px 0;
+      font-weight: 600;
+      font-family: var(--font-display);
+      letter-spacing: 0.02em;
+    }
+
+    .rb-result {
+      text-align: center;
+      margin-top: 14px;
+      font-size: 20px;
+      color: var(--accent-red);
+      font-weight: 600;
+      font-family: var(--font-display);
+    }
+
+    /* ============================================
+       COMPARISON MATRIX
+       ============================================ */
+    .comparison-matrix {
+      margin-top: 24px;
+    }
+
+    .cm-row {
+      display: grid;
+      grid-template-columns: 150px repeat(3, 1fr);
+      align-items: center;
+      padding: 14px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+
+    .cm-row.cm-header {
+      padding-bottom: 16px;
+      border-bottom: 2px solid rgba(255,255,255,0.1);
+    }
+
+    .cm-header .cm-cell {
+      font-family: var(--font-display);
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-align: center;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+
+    .cm-cell {
+      font-size: 24px;
+      text-align: center;
+      color: var(--text-secondary);
+    }
+
+    .cm-cell.cm-lib {
+      text-align: left;
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 22px;
+      color: var(--text-primary);
+    }
+
+    .cm-yes { color: var(--accent-green); }
+    .cm-no { color: var(--accent-red); opacity: 0.6; }
+    .cm-partial { color: var(--accent-warm); }
+
+    .cm-row.cm-highlight {
+      background: rgba(124,92,252,0.1);
+      border-radius: 8px;
+      margin: 4px -16px;
+      padding: 14px 16px;
+      border-bottom: none;
+    }
+
+    .cm-highlight .cm-lib { color: var(--accent); }
+
+    /* ============================================
+       THREE-UP SUMMARY CARDS
+       ============================================ */
+    .three-up {
+      display: flex;
+      gap: 24px;
+      margin-top: 20px;
+    }
+
+    .summary-card {
+      flex: 1;
+      background: var(--bg-elevated);
+      border-radius: var(--radius);
+      padding: 28px 24px;
+      border-top: 4px solid var(--accent);
+    }
+
+    .summary-card .card-num {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      color: var(--accent);
+      text-transform: uppercase;
+      margin-bottom: 14px;
+    }
+
+    .summary-card h3 {
+      font-family: var(--font-display);
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 12px;
+      line-height: 1.3;
+    }
+
+    .summary-card p {
+      font-size: 18px;
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+
+    /* ============================================
+       CTA SLIDE
+       ============================================ */
+    .slide.cta {
+      background: var(--bg-deep);
+    }
+
+    .slide.cta::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(ellipse at 80% 80%, rgba(124,92,252,0.1) 0%, transparent 50%),
+        radial-gradient(ellipse at 20% 20%, rgba(124,92,252,0.04) 0%, transparent 40%);
+    }
+
+    .cta-items {
+      margin-top: 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .cta-item {
+      font-size: 26px;
+      color: var(--text-body);
+      padding-left: 32px;
+      position: relative;
+      line-height: 1.4;
+    }
+
+    .cta-item::before {
+      content: '\25B8';
+      position: absolute;
+      left: 0;
+      color: var(--accent);
+    }
+
+    .cta-item strong { color: var(--text-primary); }
+
+    .cta-repo {
+      margin-top: 36px;
+      font-size: 22px;
+      color: var(--accent);
+      font-family: var(--font-mono);
+    }
+
+    .speakers-row {
+      margin-top: 40px;
+      display: flex;
+      gap: 48px;
+    }
+
+    .speaker {
+      font-size: 20px;
+      color: var(--text-secondary);
+    }
+
+    .speaker strong {
+      display: block;
+      color: var(--text-primary);
+      font-size: 22px;
+      font-family: var(--font-display);
+    }
+
+    .cta-close {
+      margin-top: 32px;
+      font-size: 22px;
+      font-style: italic;
+      color: var(--text-secondary);
+    }
+
+    /* ============================================
+       IMAGE PLACEHOLDERS
+       ============================================ */
+    .img-placeholder {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 24px;
+      background: linear-gradient(135deg, rgba(124,92,252,0.04) 0%, rgba(124,92,252,0.01) 100%);
+      border: 1px dashed rgba(124,92,252,0.2);
+      border-radius: var(--radius);
+      text-align: center;
+    }
+
+    .img-placeholder .img-icon {
+      font-size: 24px;
+      color: rgba(124,92,252,0.25);
+      line-height: 1;
+    }
+
+    .img-placeholder .img-desc {
+      font-size: 14px;
+      color: rgba(124,92,252,0.4);
+      font-family: var(--font-body);
+      max-width: 320px;
+      line-height: 1.4;
+    }
+
+    .img-placeholder .img-spec {
+      font-size: 11px;
+      color: rgba(124,92,252,0.2);
+      font-family: var(--font-mono);
+    }
+
+    /* Callout box */
+    .callout {
+      margin-top: 32px;
+      background: var(--bg-elevated);
+      border-radius: 8px;
+      padding: 22px 28px;
+      border-left: 4px solid var(--accent-warm);
+    }
+
+    .callout p:first-child {
+      font-size: 22px;
+      color: var(--accent-warm);
+      font-weight: 700;
+    }
+
+    .callout p + p {
+      font-size: 19px;
+      color: var(--text-secondary);
+      margin-top: 6px;
+    }
+
+    /* ============================================
+       PRINT STYLES
+       ============================================ */
+    @media print {
+      body { background: white; }
+      .slide { break-after: page; margin: 0; }
+      .slide::after, .slide::before { display: none; }
+    }
+  </style>
+</head>
+<body>
+<!-- ====================================================
+     SLIDE 1: Title
+     ==================================================== -->
+<div class="slide title-slide" id="slide-1">
+  <img src="images/img-slide01.png" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0.15;z-index:0;pointer-events:none;">
+  <h1>Distilling<br><span>the Stream</span></h1>
+  <p class="subtitle">Kafka-Backed Elixir at Scale</p>
+  <p class="speakers">Piotr Rybarczyk &amp; Anton Borisov — Fresha</p>
+  <p class="conference">Code BEAM / ElixirConf 2026</p>
+  <div class="slide-number">1 / 28</div>
+</div>
+
+<!-- ====================================================
+     SLIDE 1: Hook — sharper incident
+     ==================================================== -->
+<div class="slide incident" id="slide-2">
+  <div class="incident-label">Client Notifications — Third Event-Driven Service</div>
+  <h2>Production rollout.<br>Not everything goes according to plan.</h2>
+  <blockquote>"Clients are receiving duplicate messages.<br>Or none at all."</blockquote>
+  <p style="margin-top: 32px; font-size: 22px; color: var(--text-dim);">
+    This talk is about how we fixed that.<br>And everything else.
+  </p>
+  <img src="images/img-slide02-bells.png" alt="Duplicate notifications" style="position: absolute; top: 40px; right: 56px; width: 180px; height: 180px; object-fit: contain; z-index: 2; opacity: 0.85; border-radius: 12px;">
+  <div class="slide-footer">Distilling the Stream</div>
+  <div class="slide-number">2 / 28</div>
+  <!-- SPEAKER: "Our first event-driven service. Client Notifications. We rolled it out to production and... clients got the same notification twice. Or didn't get one at all. Not everything goes according to plan." Pause. Then: "This talk is about how we fixed that. And everything else." -->
+</div>
+
+<!-- ====================================================
+     SLIDE 2: What We Did Wrong
+     ==================================================== -->
+<div class="slide incident" id="slide-3">
+  <div class="incident-label">The Mistake</div>
+  <h2>We tried to build our own message broker.</h2>
+  <ul style="margin-top: 24px;">
+    <li>Shared Postgres instance as a message queue — polling loops, table bloat, lock contention</li>
+    <li>"It'll be easier and faster than setting up Kafka." It wasn't.</li>
+  </ul>
+  <div class="callout" style="margin-top: 32px;">
+    <p>Postgres works as a broker — but not across multiple distributed services.</p>
+  </div>
+  <div class="slide-footer">Distilling the Stream</div>
+  <div class="slide-number">3 / 28</div>
+  <!-- SPEAKER: "Before any of this existed, we thought we could skip Kafka entirely. Just use Postgres. Shared instance, poll for new rows, process them. How hard could it be?" Pause. "Turns out: very." -->
+</div>
+
+<!-- ====================================================
+     SLIDE 3: Stack Overview — bottom-up with "Your App"
+     ==================================================== -->
+<div class="slide" id="slide-4">
+  <h2>Three Libraries. <span class="accent">One Stack.</span></h2>
+  <!-- REPLACE: Swap this .stack-layers div with a proper SVG architecture diagram (800×350px) showing three layers with upward arrows, "Your Services" on top connected to Kafkaesque -->
+  <div class="stack-layers">
+    <div class="stack-layer app-layer">
+      <h3>Client Notifications</h3>
+      <p>Business logic lives here</p>
+    </div>
+    <div class="stack-layer">
+      <h3>Kafkaesque - Soon Open Source</h3>
+      <p>Framework — plugins, DLQ, observability, health checks</p>
+    </div>
+    <div class="stack-layer dim">
+      <h3>KafkaEx - Open Source</h3>
+      <p>Kafka client + consumer groups — pure Elixir</p>
+    </div>
+    <div class="stack-layer dim">
+      <h3>Kayrock - Open Source</h3>
+      <p>Wire protocol — binary encoding/decoding</p>
+    </div>
+  </div>
+  <div class="slide-footer">Distilling the Stream</div>
+  <div class="slide-number">4 / 28</div>
+  <!-- SPEAKER: Walk this bottom-up. "Kayrock speaks the protocol. KafkaEx manages connections and consumer groups. Kafkaesque is the framework your engineers actually use. Your code sits on top." All three are open source. -->
+</div>
+
+<!-- ====================================================
+     SLIDE 4: Scale / Context — with metrics
+     ==================================================== -->
+<div class="slide" id="slide-5">
+  <img src="images/img-slide-5.png" alt="" style="position:absolute;right:-40px;top:50%;transform:translateY(-50%);width:420px;height:420px;object-fit:contain;opacity:0.2;z-index:0;pointer-events:none;">
+  <h2>Why Does This Matter?</h2>
+  <ul>
+    <li>Fresha: global marketplace for salons &amp; spas</li>
+    <li>Tens of millions of Kafka messages per day across dozens of Elixir services</li>
+    <li>Teams used Kaffe, Brod, Broadway, KafkaEx — everyone picked their own</li>
+    <li>Every team built their own metrics, alerts &amp; traces from scratch</li>
+    <li>Today: one framework, one pattern, consistent across the org</li>
+  </ul>
+  <div class="slide-footer">Distilling the Stream</div>
+  <div class="slide-number">5 / 28</div>
+  <!-- SPEAKER: Set the stakes. "We had four different Kafka libraries in production. Each team built their own observability. When something broke at 2 AM, you had to figure out which library, which metrics, which alerts applied to this service." -->
+</div>
+
+<!-- ====================================================
+     SLIDE 5: Pillar 1 Divider
+     ==================================================== -->
+<div class="slide divider" id="slide-6">
+  <div class="pillar-number">1</div>
+  <h2>DevEx &amp;<br>Velocity</h2>
+  <p class="divider-sub">Convention over configuration. At scale.</p>
+  <p class="divider-byline">— Piotr Rybarczyk</p>
+  <div class="slide-number">6 / 28</div>
+  <!-- SPEAKER: Piotr takes over. "We solved the DX problem first. Because if engineers can't use the framework, nothing else matters." -->
+</div>
+
+<!-- ====================================================
+     SLIDE 6: Incident — boilerplate chaos
+     ==================================================== -->
+<div class="slide incident" id="slide-7">
+  <div class="incident-label">The Problem</div>
+  <h2>"How do I consume a Kafka topic?"</h2>
+  <ul style="margin-top: 24px;">
+    <li>50+ services. Each consumer slightly different.</li>
+    <li>At worst, no shared monitoring at all</li>
+    <li>New engineer asks Slack — gets 5 different answers</li>
+    <li><b>On call</b>, 2 AM alert: "consumer is down" — but which pattern is this one?</li>
+  </ul>
+  <div class="slide-footer">Distilling the Stream</div>
+  <div class="slide-number">7 / 28</div>
+  <!-- SPEAKER: This is painful. When something goes wrong at 2 AM, you're reading five different consumer implementations to figure out which one applies here. -->
+</div>
+
+<!-- ====================================================
+     SLIDE 7: Before / After code — font-size fixed
+     ==================================================== -->
+<div class="slide code-slide" id="slide-8">
+  <h2>Before <span class="accent">&rarr;</span> After</h2>
+  <div class="code-columns">
+    <div class="code-col">
+      <h3>Before (raw KafkaEx)</h3>
+      <pre><span class="kw">defmodule</span> <span class="fn">MyApp.ConsumerSupervisor</span> <span class="kw">do</span>
+  <span class="kw">use</span> Supervisor
+
+  <span class="kw">def</span> <span class="fn">init</span>(_opts) <span class="kw">do</span>
+    children <span class="op">=</span> [
+      <span class="cm"># 15 more lines of boilerplate...</span>
+      {KafkaEx.ConsumerGroup, [
+        group: <span class="st">"my-group"</span>,
+        topics: [<span class="st">"my-topic"</span>],
+        handler: <span class="fn">MyHandler</span>
+      ]}
+    ]
+    Supervisor.init(children,
+      strategy: <span class="nm">:one_for_one</span>)
+  <span class="kw">end</span>
+<span class="kw">end</span></pre>
+    </div>
+    <div class="code-col">
+      <h3>After (Kafkaesque)</h3>
+      <pre><span class="kw">defmodule</span> <span class="fn">MyApp.ConsumerSupervisor</span> <span class="kw">do</span>
+  <span class="kw">use</span> <span class="hl">Kafkaesque.ConsumerSupervisor</span>,
+    consumer_group_identifier: Application.compile_env!(<span class="nm">:myapp</span>, <span class="nm">:consumer_group</span>),
+    topics: Application.compile_env!(<span class="nm">:myapp</span>, <span class="nm">:topics</span>),
+    message_handler: <span class="fn">MyApp.Handler</span>
+<span class="kw">end</span>
+
+<span class="cm"># Add to your supervision tree. Done.</span></pre>
+    </div>
+  </div>
+  <div class="slide-footer">Distilling the Stream</div>
+  <div class="slide-number">8 / 28</div>
+  <!-- SPEAKER: The after version is what every engineer writes. The before version is what they no longer have to understand. -->
+</div>
+
+<!-- ====================================================
+     SLIDE 8: Everything in One Module
+     ==================================================== -->
+<div class="slide" id="slide-9">
+  <h2>One Module. <span class="accent">Everything Included.</span></h2>
+  <ul>
+    <li><strong style="color: var(--text-primary);">Telemetry metrics</strong> — consumer lag, processing time, error rates, all standard</li>
+    <li><strong style="color: var(--text-primary);">Distributed tracing</strong> — propagated across producer &rarr; consumer boundaries</li>
+    <li><strong style="color: var(--text-primary);">Protobuf decoding</strong> — schema-based deserialization as a plugin</li>
+    <li><strong style="color: var(--text-primary);">Dead letter queue</strong> — failed messages routed, not lost</li>
+  </ul>
+  <p style="margin-top: 24px; font-size: 22px; color: var(--text-dim);">
+    Plus health checks, topic prefixing, and more — all in one <code style="color: var(--accent); font-family: var(--font-mono);">use Kafkaesque.ConsumerSupervisor</code> call.
+  </p>
+  <div class="slide-footer">Distilling the Stream</div>
+  <div class="slide-number">9 / 28</div>
+  <!-- SPEAKER: "Every one of these used to be hand-rolled per service. Telemetry? Each team had their own metrics. Tracing? Maybe, if someone remembered. Now it's all in one module. You use ConsumerSupervisor, you get everything." -->
+</div>
+
+<!-- ====================================================
+     SLIDE 9: Plugin System — middleware chain
+     ==================================================== -->
+<div class="slide code-slide" id="slide-10">
+  <h2>Plugins: <span class="accent">Composable Middleware</span></h2>
+  <pre><span class="kw">use</span> Kafkaesque.Consumer,
+  topics_config: %{
+    <span class="st">"appointment_events"</span> <span class="op">=&gt;</span> %{
+      decoder_config: {<span class="fn">DebeziumProtoDecoder</span>,
+        [schema: <span class="fn">AppointmentEventEnvelope</span>]},
+      <span class="hl">handle_message_plugins: [</span>
+      <span class="hl">  {KafkaesqueAddons.Plugins.UUIDIdempotencyPlugin,</span>
+      <span class="hl">    [strategy: EctoInboxStrategy]}</span>
+      <span class="hl">],</span>
+      dead_letter_producer: {
+        <span class="fn">Kafkaesque.DeadLetterQueue.KafkaTopicProducer</span>,
+        [topic: <span class="st">"appointment_events.dlq"</span>]}
+    }
+  }</pre>
+  <p class="code-caption">
+    Per-topic pipeline. Each plugin wraps the next &rarr; composable, testable, reusable.
+  </p>
+  <div class="slide-footer">Distilling the Stream</div>
+  <div class="slide-number">10 / 28</div>
+  <!-- SPEAKER: "Plugins form a middleware chain — each one wraps the next. UUIDIdempotencyPlugin checks the inbox before processing. Protobuf decoder unwraps the envelope. DLQ catches failures. All per-topic, all composable. You can write your own plugin in ~30 lines — just implement handle_message/4." -->
+</div>
+
+<!-- ====================================================
+     SLIDE 10: Pillar 1 Takeaway
+     ==================================================== -->
+<div class="slide takeaway" id="slide-11">
+  <h2>Pillar 1 Takeaway</h2>
+  <p class="takeaway-text">Write the boilerplate once.<br>Let your team focus on business logic.</p>
+  <p style="margin-top: 28px; font-size: 22px; color: #666;">
+    Convention over configuration is not just a Rails idea.<br>
+    It's how you scale a team's Kafka knowledge across an org.
+  </p>
+  <div class="slide-number">11 / 28</div>
+</div>
+
+<!-- ====================================================
+     SLIDE 11: Pillar 2 Divider
+     ==================================================== -->
+<div class="slide divider" id="slide-12">
+  <div class="pillar-number">2</div>
+  <h2>Resilience via<br>Outbox, Inbox &amp; Idempotency</h2>
+  <p class="divider-sub">At-least-once delivery is a feature. Duplicates are not.</p>
+  <p class="divider-byline">— Anton Borisov</p>
+  <div class="slide-number">12 / 28</div>
+  <!-- SPEAKER: Colleague takes over. Bridge from P1: "We solved the DX problem. But there's a more dangerous problem waiting — what happens when Kafka delivers a message twice?" -->
+</div>
+
+<!-- ====================================================
+     SLIDE 12: Incident — duplicates + rebalance diagram
+     ==================================================== -->
+<div class="slide incident" id="slide-13">
+  <div class="incident-label">The Problem</div>
+  <h2>Same event. Processed twice.</h2>
+  <!-- IMAGE: Replace this .rb-diagram with a professional sequence diagram (800×250px) showing consumer rebalance → duplicate delivery -->
+  <div class="rb-diagram">
+    <div class="rb-row">
+      <div class="rb-label">Consumer A</div>
+      <div class="rb-bars">
+        <div class="rb-bar processing" style="flex: 3;">Processing msg #42</div>
+        <div class="rb-bar dead" style="flex: 1;">&#x2717; Dead</div>
+      </div>
+    </div>
+    <div class="rb-event">&#9889; Broker restart triggers rebalance</div>
+    <div class="rb-row">
+      <div class="rb-label">Consumer B</div>
+      <div class="rb-bars">
+        <div class="rb-bar idle" style="flex: 2;">Idle</div>
+        <div class="rb-bar processing" style="flex: 2;">Re-processes msg #42</div>
+      </div>
+    </div>
+    <div class="rb-result">Message #42 processed <strong>twice</strong></div>
+  </div>
+  <p style="margin-top: 16px; font-size: 20px; color: var(--text-dim);">
+    This is not a bug. This is Kafka. At-least-once delivery is the contract.
+  </p>
+  <div class="slide-footer">Distilling the Stream</div>
+  <div class="slide-number">13 / 28</div>
+  <!-- SPEAKER: Ask the room: "How many of you have hit this? Duplicate events in production?" Hands go up. "Good — you're in good company." Then explain the diagram. The point: you cannot fix this at the broker level. You fix it at the application level. -->
+</div>
+
+<!-- ====================================================
+     SLIDE 13: Domain idempotency — simplified
+     ==================================================== -->
+<div class="slide" id="slide-14">
+  <h2>Rule #1: <span class="accent">Domain-Level Idempotency First</span></h2>
+  <ul>
+    <li>Design business logic so processing the same event twice has no side effect</li>
+    <li>Use natural keys + unique constraints — let the database enforce it</li>
+  </ul>
+  <!-- IMAGE: Two-path diagram (500×200px). Left: message arrives twice → DUPLICATE EFFECT (red). Right: same message → idempotent handler → SAME RESULT (green). Below the bullet list. -->
+  <div class="img-placeholder" style="margin-top: 24px; height: 140px;">
+    <span class="img-icon">&#9674;</span>
+    <span class="img-desc">Two-path diagram: naive handler (duplicate effect) vs idempotent handler (same result)</span>
+    <span class="img-spec">~500 &times; 200px SVG</span>
+  </div>
+  <div class="callout">
+    <p>Idempotency is a design decision, not a library feature.</p>
+    <p>Infrastructure patterns help. They do not guarantee it.</p>
+  </div>
+  <div class="slide-footer">Distilling the Stream</div>
+  <div class="slide-number">14 / 28</div>
+  <!-- SPEAKER: This is the most important slide in the talk. Domain-level first. Always. The Inbox pattern (next slide) is the safety net, not the strategy. -->
+</div>
+
+<!-- ====================================================
+     SLIDE 14: Inbox — two strategies as plugins
+     ==================================================== -->
+<div class="slide code-slide" id="slide-15">
+  <h2>The Inbox: <span class="accent">Two Strategies</span></h2>
+  <div class="code-columns">
+    <div class="code-col">
+      <h3>Ecto Strategy (Postgres)</h3>
+      <pre><span class="st">"payments"</span> <span class="op">=&gt;</span> %{
+  handle_message_plugins: [
+    {<span class="fn">UUIDIdempotencyPlugin</span>, [
+      <span class="hl">strategy: EctoInboxStrategy</span>
+    ]}
+  ]
+}
+
+<span class="cm"># UUID persisted in partitioned table</span>
+<span class="cm"># ~2ms overhead per message</span>
+<span class="cm"># Pruned with PgPartman</span></pre>
+    </div>
+    <div class="code-col">
+      <h3>Redis Strategy (high-throughput)</h3>
+      <pre><span class="st">"notifications"</span> <span class="op">=&gt;</span> %{
+  handle_message_plugins: [
+    {<span class="fn">UUIDIdempotencyPlugin</span>, [
+      <span class="hl">strategy: RedisInboxStrategy</span>
+    ]}
+  ]
+}
+
+<span class="cm"># UUID checked in Redis</span>
+<span class="cm"># Sub-ms overhead</span>
+<span class="cm"># TTL-based expiry</span></pre>
+    </div>
+  </div>
+  <p class="code-caption">
+    Same plugin, swappable strategy. Pick based on your throughput and durability needs.
+  </p>
+  <div class="slide-footer">Distilling the Stream</div>
+  <div class="slide-number">15 / 28</div>
+  <!-- SPEAKER: "Same UUIDIdempotencyPlugin, two backends. Ecto strategy writes to a partitioned Postgres table — ~2ms, rock solid, PgPartman handles cleanup. Redis strategy for high-throughput topics where sub-millisecond matters. You choose per-topic." -->
+</div>
+
+<!-- ====================================================
+     SLIDE 15: Transactional Outbox + CDC
+     ==================================================== -->
+<div class="slide code-slide" id="slide-16">
+  <h2>The Other Side: <span class="accent">Transactional Outbox + CDC</span></h2>
+  <pre><span class="cm"># Domain change + event in ONE database transaction</span>
+<span class="kw">def</span> <span class="fn">confirm_appointment</span>(appointment, params) <span class="kw">do</span>
+  changeset = Appointment.confirm_changeset(appointment, params)
+
+  Multi.new()
+  <span class="op">|&gt;</span> Multi.update(<span class="nm">:appointment</span>, changeset)
+  <span class="op">|&gt;</span> Multi.run(<span class="nm">:outbox</span>, <span class="kw">fn</span> repo, <span class="hl">%{appointment: confirmed}</span> <span class="op">-&gt;</span>
+    repo.insert(<span class="hl">%OutboxEvent{</span>
+      <span class="hl">topic_name: <span class="st">"appointments.events-v1"</span>,</span>
+      <span class="hl">event_type: <span class="st">"appointment_confirmed"</span>,</span>
+      <span class="hl">partition_key: confirmed.provider_id,</span>
+      <span class="hl">payload: Protobuf.encode(confirmed)</span>
+    <span class="hl">}</span>)
+  <span class="kw">end</span>)
+  <span class="op">|&gt;</span> Repo.transaction()
+<span class="kw">end</span></pre>
+  <div class="callout" style="margin-top: 16px;">
+    <p>Debezium reads PostgreSQL WAL, publishes to Kafka. No polling. Zero coupling.</p>
+    <p>Your app writes to Postgres. Debezium does the rest — near real-time CDC.</p>
+  </div>
+  <div class="slide-footer">Distilling the Stream</div>
+  <div class="slide-number">16 / 28</div>
+  <!-- SPEAKER: "We talked about the consumer side. Now the producer side. The outbox pattern: you never call Kafka from business logic. Write an OutboxEvent in the same transaction as your domain change. Debezium connects to the WAL, picks it up, publishes to Kafka. No polling, no cron jobs. pg_partman handles weekly partitions with 2-week retention." -->
+</div>
+
+<!-- ====================================================
+     SLIDE 16: Pillar 2 Takeaway
+     ==================================================== -->
+<div class="slide takeaway" id="slide-17">
+  <h2>Pillar 2 Takeaway</h2>
+  <p class="takeaway-text">Idempotency is not an afterthought.<br>Design for it from day one.</p>
+  <p style="margin-top: 28px; font-size: 22px; color: #666;">
+    Kafka guarantees at-least-once delivery.<br>
+    Your application must guarantee idempotent processing.
+  </p>
+  <div class="slide-number">17 / 28</div>
+</div>
+
+<!-- ====================================================
+     SLIDE 17: Pillar 3 Divider
+     ==================================================== -->
+<div class="slide divider" id="slide-18">
+  <div class="pillar-number">3</div>
+  <h2>Why Pure<br>Elixir</h2>
+  <p class="divider-sub">A real decision. With real reasons.</p>
+  <p class="divider-byline">— Piotr Rybarczyk &amp; Anton Borisov</p>
+  <div class="slide-number">18 / 28</div>
+  <!-- SPEAKER: Bridge from P2: "We had the patterns. But we needed the right foundation to run them on." Both speakers share this section. -->
+</div>
+
+<!-- ====================================================
+     SLIDE 18: Landscape — with comparison matrix
+     ==================================================== -->
+<div class="slide" id="slide-19">
+  <h2>The Landscape <span class="accent">(a few years ago)</span></h2>
+  <p style="font-size: 22px; color: var(--text-secondary); margin-bottom: 20px;">We evaluated real options against a real production problem.</p>
+  <div class="comparison-matrix">
+    <div class="cm-row cm-header">
+      <div class="cm-cell cm-lib"></div>
+      <div class="cm-cell">Elixir Native<br><span style="font-size:11px;opacity:0.6;text-transform:none;letter-spacing:0;">No Erlang / C</span></div>
+      <div class="cm-cell">MSK Recovery<br><span style="font-size:11px;opacity:0.6;text-transform:none;letter-spacing:0;">Survives AWS restarts</span></div>
+      <div class="cm-cell">Team Owns It<br><span style="font-size:11px;opacity:0.6;text-transform:none;letter-spacing:0;">Readable &amp; forkable</span></div>
+    </div>
+    <div class="cm-row">
+      <div class="cm-cell cm-lib">Broadway</div>
+      <div class="cm-cell"><span class="cm-partial">~</span></div>
+      <div class="cm-cell"><span class="cm-yes">&#10003;</span></div>
+      <div class="cm-cell"><span class="cm-partial">~</span></div>
+    </div>
+    <div class="cm-row">
+      <div class="cm-cell cm-lib">Brod</div>
+      <div class="cm-cell"><span class="cm-no">&#10005;</span></div>
+      <div class="cm-cell"><span class="cm-yes">&#10003;</span></div>
+      <div class="cm-cell"><span class="cm-no">&#10005;</span></div>
+    </div>
+    <div class="cm-row">
+      <div class="cm-cell cm-lib">Kaffe</div>
+      <div class="cm-cell"><span class="cm-partial">~</span></div>
+      <div class="cm-cell"><span class="cm-no">&#10005;</span></div>
+      <div class="cm-cell"><span class="cm-partial">~</span></div>
+    </div>
+    <div class="cm-row cm-highlight">
+      <div class="cm-cell cm-lib">KafkaEx</div>
+      <div class="cm-cell"><span class="cm-yes">&#10003;</span></div>
+      <div class="cm-cell"><span class="cm-yes">&#10003;</span></div>
+      <div class="cm-cell"><span class="cm-yes">&#10003;</span></div>
+    </div>
+  </div>
+  <div class="slide-footer">Distilling the Stream</div>
+  <div class="slide-number">19 / 28</div>
+  <!-- SPEAKER: This was not an ideological choice. Brod is solid — but it's Erlang, and pre-LLM, reading Erlang source code required a specialist. That mattered for our team. Kaffe struggled with MSK broker restarts. KafkaEx: pure Elixir, the team could read and own every line. -->
+</div>
+
+<!-- ====================================================
+     SLIDE 19: Let it crash — with caption
+     ==================================================== -->
+<div class="slide code-slide" id="slide-20">
+  <h2>MSK Restarts: <span class="accent">Let It Crash</span></h2>
+  <pre><span class="cm"># When the broker goes away...</span>
+<span class="cm"># KafkaEx consumer crashes. Supervisor restarts it.</span>
+<span class="cm"># It reconnects. No special recovery code.</span>
+
+<span class="kw">defmodule</span> <span class="fn">MyApp.Application</span> <span class="kw">do</span>
+  <span class="kw">use</span> Application
+
+  <span class="kw">def</span> <span class="fn">start</span>(_type, _args) <span class="kw">do</span>
+    children <span class="op">=</span> [
+      <span class="hl">MyApp.ConsumerSupervisor</span>  <span class="cm"># &larr; restarts on crash</span>
+    ]
+    Supervisor.start_link(children,
+      strategy: <span class="nm">:one_for_one</span>)
+  <span class="kw">end</span>
+<span class="kw">end</span></pre>
+  <p class="code-caption">
+    This is not clever engineering. This is OTP doing what OTP does.
+  </p>
+  <div class="slide-footer">Distilling the Stream</div>
+  <div class="slide-number">20 / 28</div>
+  <!-- SPEAKER: The supervisor IS the recovery strategy. Kaffe needed special handling for MSK restarts. We didn't write any recovery code — because we didn't have to. -->
+</div>
+
+<!-- ====================================================
+     SLIDE 20: Pillar 3 Takeaway
+     ==================================================== -->
+<div class="slide takeaway" id="slide-21">
+  <h2>Pillar 3 Takeaway</h2>
+  <p class="takeaway-text">We chose pure Elixir because<br>"let it crash" solved a real problem.</p>
+  <p style="margin-top: 28px; font-size: 22px; color: #666;">
+    OTP supervision is not a trick. It's a production strategy.<br>
+    And the team could read and own every line.
+  </p>
+  <div class="slide-number">21 / 28</div>
+</div>
+
+<!-- ====================================================
+     SLIDE 21: Pillar 4 Divider
+     ==================================================== -->
+<div class="slide divider" id="slide-22">
+  <div class="pillar-number">4</div>
+  <h2>Infrastructure<br>Optimization</h2>
+  <p class="divider-sub">Same protocol. Zero code changes.</p>
+  <p class="divider-byline">— Piotr Rybarczyk &amp; Anton Borisov</p>
+  <div class="slide-number">22 / 28</div>
+  <!-- SPEAKER: "We've talked about application-level patterns. Now let's zoom out. Kafka is evolving fast at the infrastructure layer — and because we built on the standard protocol, we get to ride that wave for free." -->
+</div>
+
+<!-- ====================================================
+     SLIDE 22: Diskless Kafka + Infrastructure Evolution
+     ==================================================== -->
+<div class="slide" id="slide-23">
+  <h2>The Kafka You Deploy Is <span class="accent">Changing</span></h2>
+  <ul style="margin-top: 24px;">
+    <li><b>KRaft mode</b> — ZooKeeper is gone. Simpler operations, faster failovers.</li>
+    <li><b>Tiered storage</b> (KIP-405) — hot data on disk, cold data in S3. Infinite retention, lower cost.</li>
+    <li><b>Diskless brokers</b> (WarpStream, AutoMQ) — no local disks at all. Object storage only. Dramatically cheaper MSK alternatives.</li>
+    <li><b>Shared-nothing rebalancing</b> — consumer groups recover in seconds, not minutes.</li>
+  </ul>
+  <div class="callout" style="margin-top: 24px;">
+    <p>Every one of these is transparent to your application. Same Kafka protocol. Same KafkaEx calls. Same Kafkaesque consumers.</p>
+  </div>
+  <div class="slide-footer">Distilling the Stream</div>
+  <div class="slide-number">23 / 28</div>
+  <!-- SPEAKER: "This is the payoff of building on the Kafka protocol rather than a specific deployment. WarpStream runs on S3 — no EBS volumes, no broker disks. We tested it: swapped the bootstrap servers, redeployed. Zero code changes. Our consumers, our idempotency plugins, our outbox — all of it just worked. That's the benefit of the protocol being the contract, not the infrastructure." -->
+</div>
+
+<!-- ====================================================
+     SLIDE 23: Pillar 4 Takeaway
+     ==================================================== -->
+<div class="slide takeaway" id="slide-24">
+  <h2>Pillar 4 Takeaway</h2>
+  <p class="takeaway-text">Build on the protocol, not the deployment.<br>Infrastructure changes. Your code shouldn't have to.</p>
+  <p style="margin-top: 28px; font-size: 22px; color: #666;">
+    Diskless Kafka, tiered storage, KRaft — all free upgrades<br>
+    when your application speaks the standard protocol.
+  </p>
+  <div class="slide-number">24 / 28</div>
+</div>
+
+<!-- ====================================================
+     SLIDE 25: What Changes Monday (NEW)
+     ==================================================== -->
+<div class="slide" id="slide-25">
+  <h2>What Changes <span class="accent-warm">Monday</span></h2>
+  <div class="action-items">
+    <div class="action-item">
+      <span class="action-num">01</span>
+      <div>
+        <h3>Audit one consumer for idempotency</h3>
+        <p>Pick your most critical handler. Ask: "What happens if this message arrives twice?"</p>
+      </div>
+    </div>
+    <div class="action-item">
+      <span class="action-num">02</span>
+      <div>
+        <h3>Standardize your consumer supervisor pattern</h3>
+        <p>One pattern. One way to start a consumer. Document it. Enforce it.</p>
+      </div>
+    </div>
+    <div class="action-item">
+      <span class="action-num">03</span>
+      <div>
+        <h3>Watch the Kafkaesque repo</h3>
+        <p>Open-source drop coming. The patterns work even without the library.</p>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer">Distilling the Stream</div>
+  <div class="slide-number">25 / 28</div>
+  <!-- SPEAKER: These are the three things you can start doing tomorrow. You don't need Kafkaesque for #1 and #2. -->
+</div>
+
+<!-- ====================================================
+     SLIDE 26: Summary — four-up cards
+     ==================================================== -->
+<div class="slide" id="slide-26">
+  <h2>Four Things We Learned</h2>
+  <div class="three-up" style="grid-template-columns: repeat(4, 1fr);">
+    <div class="summary-card">
+      <div class="card-num">Pillar 1</div>
+      <h3>Write the boilerplate once.</h3>
+      <p>Convention over configuration scales.</p>
+    </div>
+    <div class="summary-card">
+      <div class="card-num">Pillar 2</div>
+      <h3>Idempotency is a design decision.</h3>
+      <p>Domain-level first. Infrastructure second.</p>
+    </div>
+    <div class="summary-card">
+      <div class="card-num">Pillar 3</div>
+      <h3>OTP supervision is a strategy.</h3>
+      <p>"Let it crash" — engineering, not ideology.</p>
+    </div>
+    <div class="summary-card">
+      <div class="card-num">Pillar 4</div>
+      <h3>Build on the protocol.</h3>
+      <p>Infrastructure changes. Your code doesn't.</p>
+    </div>
+  </div>
+  <div class="slide-footer">Distilling the Stream</div>
+  <div class="slide-number">26 / 28</div>
+  <!-- SPEAKER: "Photograph this slide." These are the four things worth keeping. Let it sit for a few seconds. -->
+</div>
+
+<!-- ====================================================
+     SLIDE 27: What's in the Future
+     ==================================================== -->
+<div class="slide" id="slide-27">
+  <h2>What's in the <span class="accent">Future</span></h2>
+  <ul style="margin-top: 24px;">
+    <li><b>Simplified encoding/decoding</b> — first-class Avro and Protobuf support with schema registry integration. Define your schema, get serialization for free</li>
+    <li><b>Web UI</b> — real-time metrics, consumer health, lag monitoring, and topic topology across all Kafkaesque services</li>
+  </ul>
+  <div class="callout" style="margin-top: 24px;">
+    <p>The goal: make Kafka in Elixir feel as natural as Ecto feels for Postgres.</p>
+  </div>
+  <div class="slide-footer">Distilling the Stream</div>
+  <div class="slide-number">27 / 28</div>
+  <!-- SPEAKER: "These are the things we're building next. Avro/Proto support means you stop hand-rolling encoders — define a .proto file, and Kafkaesque generates the serializer plugin. The Web UI gives you real-time visibility into consumer lag, health, and topology — no more guessing what's happening in production." -->
+</div>
+
+<!-- ====================================================
+     SLIDE 28: CTA + Q&A — narrative close + QR
+     ==================================================== -->
+<div class="slide cta" id="slide-28">
+  <h2>Take These Home</h2>
+  <div class="cta-items">
+    <div class="cta-item">Design for idempotency <strong>from day one</strong></div>
+    <div class="cta-item">Let OTP do the recovery work — <strong>don't fight it</strong></div>
+    <div class="cta-item">Kafkaesque is being <strong>open-sourced</strong> — watch the repo</div>
+  </div>
+  <div style="display: flex; align-items: flex-start; gap: 40px; margin-top: 32px;">
+    <div>
+      <div class="cta-repo">github.com/[org]/kafkaesque</div>
+    </div>
+    <!-- IMAGE: QR code linking to Kafkaesque GitHub repo. ~140×140px, scannable from 6 meters. -->
+    <div class="img-placeholder" style="width: 140px; height: 140px; flex-shrink: 0;">
+      <span class="img-icon">&#9638;</span>
+      <span class="img-desc">QR Code</span>
+    </div>
+  </div>
+  <p class="cta-close">Duplicate notifications? Missing messages? That was the last time.</p>
+  <div class="speakers-row">
+    <div class="speaker">
+      <strong>Piotr Rybarczyk</strong>
+      @[handle]
+    </div>
+    <div class="speaker">
+      <strong>Anton Borisov</strong>
+      @[handle]
+    </div>
+  </div>
+  <div class="slide-number">28 / 28</div>
+  <!-- SPEAKER: "That client with the duplicate appointments? We never saw her again. Because the Inbox pattern is running in every service." Open floor for questions. Both speakers on stage. -->
+</div>
+</body>
+</html>
