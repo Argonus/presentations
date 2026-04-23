@@ -1,0 +1,2253 @@
+w<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <title>Distilling the Stream: Kafka-Backed Elixir at Scale</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:wght@400;500;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    /* ============================================
+       DESIGN TOKENS
+       ============================================ */
+    :root {
+      --bg-deep:      #0A0B12;
+      --bg-surface:   #12132A;
+      --bg-elevated:  #1A1B36;
+      --accent:       #7C5CFC;
+      --accent-warm:  #E8A838;
+      --accent-green: #5CE8B4;
+      --accent-red:   #F06060;
+      --text-primary: #EEEEF0;
+      --text-body:    #C0C0D8;
+      --text-secondary: #8B8BA0;
+      --text-dim:     #555568;
+      --radius:       10px;
+      --font-display: 'Sora', 'Helvetica Neue', sans-serif;
+      --font-body:    'DM Sans', 'Helvetica Neue', sans-serif;
+      --font-mono:    'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+    }
+
+    /* ============================================
+       RESET
+       ============================================ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font-body);
+      background: #060608;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* ============================================
+       SLIDE SYSTEM
+       ============================================ */
+    .slide {
+      width: 1280px;
+      height: 720px;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 60px 80px;
+      margin: 0 auto 4px auto;
+      background: var(--bg-deep);
+      color: var(--text-primary);
+      page-break-after: always;
+    }
+
+    /* Content above grain + background layers */
+    .slide > * {
+      position: relative;
+      z-index: 2;
+    }
+
+    /* Grain texture overlay */
+    .slide::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      pointer-events: none;
+      opacity: 0.03;
+      background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      mix-blend-mode: overlay;
+    }
+
+    .slide-logo {
+      position: absolute;
+      bottom: 18px;
+      right: 28px;
+      width: 110px;
+      height: auto;
+      opacity: 0.85;
+      z-index: 2;
+      pointer-events: none;
+    }
+
+    .slide.divider .slide-logo {
+      filter: brightness(0) invert(1);
+      opacity: 0.9;
+    }
+
+    .slide-footer {
+      position: absolute;
+      bottom: 24px;
+      left: 40px;
+      font-family: var(--font-display);
+      font-size: 13px;
+      color: var(--text-dim);
+      letter-spacing: 0.08em;
+      z-index: 2;
+    }
+
+    /* ============================================
+       TYPOGRAPHY — Conference-scale
+       ============================================ */
+    .slide h2 {
+      font-family: var(--font-display);
+      font-size: 44px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 32px;
+      line-height: 1.15;
+      letter-spacing: -0.01em;
+    }
+
+    .slide h2 .accent { color: var(--accent); }
+    .slide h2 .accent-warm { color: var(--accent-warm); }
+
+    .slide p {
+      font-size: 26px;
+      color: var(--text-body);
+      line-height: 1.55;
+      max-width: 1000px;
+    }
+
+    .slide ul {
+      list-style: none;
+      margin-top: 8px;
+    }
+
+    .slide ul li {
+      font-size: 26px;
+      color: var(--text-body);
+      line-height: 1.45;
+      padding: 10px 0;
+      padding-left: 32px;
+      position: relative;
+    }
+
+    .slide ul li::before {
+      content: '\2192';
+      position: absolute;
+      left: 0;
+      color: var(--accent);
+      font-weight: 700;
+    }
+
+    .slide ul li strong {
+      color: var(--text-primary);
+    }
+
+    /* ============================================
+       TITLE SLIDE
+       ============================================ */
+    .slide.title-slide {
+      background: var(--bg-deep);
+      justify-content: center;
+    }
+
+    .slide.title-slide::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(ellipse at 15% 85%, rgba(124,92,252,0.12) 0%, transparent 50%),
+        radial-gradient(ellipse at 85% 25%, rgba(124,92,252,0.06) 0%, transparent 45%),
+        radial-gradient(ellipse at 50% 50%, rgba(20,20,50,0.4) 0%, transparent 70%);
+      animation: titleGlow 8s ease-in-out infinite alternate;
+    }
+
+    @keyframes titleGlow {
+      0% { opacity: 0.7; }
+      100% { opacity: 1; }
+    }
+
+    .slide.title-slide h1 {
+      font-family: var(--font-display);
+      font-size: 64px;
+      font-weight: 800;
+      line-height: 1.05;
+      color: var(--text-primary);
+      max-width: 800px;
+      letter-spacing: -0.02em;
+    }
+
+    .slide.title-slide h1 span {
+      color: var(--accent);
+    }
+
+    .slide.title-slide .subtitle {
+      font-family: var(--font-display);
+      font-size: 26px;
+      color: var(--text-secondary);
+      margin-top: 20px;
+      font-weight: 400;
+      letter-spacing: 0.02em;
+    }
+
+    .slide.title-slide .speakers {
+      font-family: var(--font-display);
+      font-size: 20px;
+      color: var(--accent);
+      margin-top: 48px;
+      font-weight: 600;
+    }
+
+    .slide.title-slide .conference {
+      font-family: var(--font-mono);
+      font-size: 14px;
+      color: var(--text-dim);
+      margin-top: 8px;
+      letter-spacing: 0.03em;
+    }
+
+    /* ============================================
+       SECTION DIVIDER
+       ============================================ */
+    .slide.divider {
+      background: var(--accent);
+      align-items: flex-start;
+      justify-content: flex-end;
+      padding-bottom: 80px;
+    }
+
+    .slide.divider::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      background:
+        radial-gradient(ellipse at 80% 20%, rgba(255,255,255,0.08) 0%, transparent 50%),
+        radial-gradient(ellipse at 20% 80%, rgba(0,0,0,0.15) 0%, transparent 50%);
+      pointer-events: none;
+    }
+
+    .slide.divider::after {
+      opacity: 0.02;
+    }
+
+    .slide.divider .pillar-number {
+      font-family: var(--font-display);
+      font-size: 200px;
+      font-weight: 900;
+      color: rgba(255,255,255,0.08);
+      position: absolute;
+      top: -30px;
+      right: 50px;
+      line-height: 1;
+      z-index: 1;
+    }
+
+    .slide.divider h2 {
+      font-size: 56px;
+      font-weight: 800;
+      color: #fff;
+      line-height: 1.08;
+      max-width: 700px;
+    }
+
+    .slide.divider .divider-sub {
+      font-size: 22px;
+      color: rgba(255,255,255,0.65);
+      margin-top: 16px;
+      font-weight: 400;
+    }
+
+    .slide.divider .divider-byline {
+      font-size: 15px;
+      color: rgba(255,255,255,0.35);
+      margin-top: 24px;
+      font-family: var(--font-mono);
+      letter-spacing: 0.03em;
+    }
+
+    /* ============================================
+       INCIDENT SLIDE
+       ============================================ */
+    .slide.incident {
+      background: var(--bg-deep);
+      border-left: 6px solid var(--accent-warm);
+    }
+
+    .slide.incident::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      background: radial-gradient(ellipse at 0% 50%, rgba(232,168,56,0.04) 0%, transparent 50%);
+    }
+
+    .slide.incident .incident-label {
+      font-family: var(--font-mono);
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      color: var(--accent-warm);
+      text-transform: uppercase;
+      margin-bottom: 24px;
+    }
+
+    .slide.incident h2 {
+      font-size: 40px;
+      color: var(--text-primary);
+    }
+
+    .slide.incident blockquote {
+      font-size: 30px;
+      color: #E0E0E8;
+      font-style: italic;
+      border-left: none;
+      margin-top: 28px;
+      line-height: 1.45;
+      font-family: var(--font-body);
+    }
+
+    /* ============================================
+       CODE SLIDE
+       ============================================ */
+    .slide.code-slide {
+      padding: 48px 64px;
+    }
+
+    .slide.code-slide h2 {
+      font-size: 34px;
+      margin-bottom: 20px;
+    }
+
+    pre {
+      background: var(--bg-elevated);
+      border-radius: var(--radius);
+      padding: 24px 28px;
+      overflow: hidden;
+      font-family: var(--font-mono);
+      font-size: 20px;
+      line-height: 1.6;
+      color: var(--text-body);
+      border: 1px solid rgba(124,92,252,0.08);
+    }
+
+    .kw  { color: #C792EA; }
+    .fn  { color: #82AAFF; }
+    .st  { color: #C3E88D; }
+    .cm  { color: #546E7A; font-style: italic; }
+    .nm  { color: #F78C6C; }
+    .hl  { background: rgba(124,92,252,0.2); border-radius: 3px; padding: 1px 5px; }
+    .op  { color: #89DDFF; }
+
+    /* Side-by-side code */
+    .code-columns {
+      display: flex;
+      gap: 24px;
+    }
+
+    .code-col { flex: 1; }
+
+    .code-col h3 {
+      font-family: var(--font-display);
+      font-size: 15px;
+      color: var(--text-secondary);
+      margin-bottom: 10px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .code-col pre {
+      font-size: 17px;
+      line-height: 1.55;
+      padding: 20px 24px;
+    }
+
+    .code-caption {
+      margin-top: 20px;
+      font-size: 20px;
+      color: var(--text-secondary);
+    }
+
+    /* ============================================
+       TAKEAWAY SLIDE
+       ============================================ */
+    .slide.takeaway {
+      background: linear-gradient(135deg, #F7F7FB 0%, #EEEEF8 100%);
+      color: #1a1a2e;
+    }
+
+    .slide.takeaway::after {
+      mix-blend-mode: multiply;
+      opacity: 0.012;
+    }
+
+    .slide.takeaway::before {
+      content: '\201C';
+      position: absolute;
+      top: 30px;
+      right: 70px;
+      font-size: 320px;
+      line-height: 1;
+      color: rgba(124,92,252,0.05);
+      font-family: Georgia, serif;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .slide.takeaway h2 {
+      color: #1a1a2e;
+      font-size: 34px;
+    }
+
+    .slide.takeaway .takeaway-text {
+      font-family: var(--font-display);
+      font-size: 36px;
+      font-weight: 700;
+      color: var(--accent);
+      margin-top: 20px;
+      line-height: 1.35;
+      max-width: 900px;
+    }
+
+    .slide.takeaway p {
+      color: #555;
+    }
+
+    /* Logo on light takeaway slides: the PNG is white-wordmark + purple glow.
+       invert(1) hue-rotate(180deg) maps white→black but preserves the purple
+       (invert turns purple to its complement, hue-rotate returns it to purple). */
+    .slide.takeaway .slide-logo {
+      filter: invert(1) hue-rotate(180deg);
+      opacity: 0.85;
+    }
+
+    /* ============================================
+       ACTION SLIDE (What Changes Monday)
+       ============================================ */
+    .action-items {
+      display: flex;
+      flex-direction: column;
+      gap: 28px;
+      margin-top: 8px;
+    }
+
+    .action-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 24px;
+    }
+
+    .action-num {
+      font-family: var(--font-mono);
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--accent-warm);
+      padding-top: 6px;
+      flex-shrink: 0;
+    }
+
+    .action-item h3 {
+      font-family: var(--font-display);
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--text-primary);
+      line-height: 1.25;
+      margin-bottom: 6px;
+    }
+
+    .action-item p {
+      font-size: 21px;
+      color: var(--text-secondary);
+      line-height: 1.4;
+    }
+
+    /* ============================================
+       STACK DIAGRAM
+       ============================================ */
+    .stack-layers {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .stack-layer {
+      background: var(--bg-elevated);
+      border-radius: 8px;
+      padding: 16px 28px;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      border-left: 4px solid var(--accent);
+    }
+
+    .stack-layer.app-layer {
+      background: transparent;
+      border: 2px dashed rgba(124,92,252,0.25);
+      border-left: 2px dashed rgba(124,92,252,0.25);
+    }
+
+    .stack-layer.dim {
+      border-left-color: #2a2a40;
+      opacity: 0.55;
+    }
+
+    .stack-layer h3 {
+      font-family: var(--font-display);
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--text-primary);
+      min-width: 150px;
+    }
+
+    .stack-layer p {
+      font-size: 19px;
+      color: var(--text-secondary);
+    }
+
+    /* ============================================
+       REBALANCE DIAGRAM
+       ============================================ */
+    .rb-diagram {
+      margin-top: 20px;
+      background: var(--bg-elevated);
+      border-radius: var(--radius);
+      padding: 24px 28px;
+      border: 1px solid rgba(124,92,252,0.08);
+    }
+
+    .rb-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin: 6px 0;
+    }
+
+    .rb-label {
+      font-family: var(--font-mono);
+      font-size: 14px;
+      color: var(--text-secondary);
+      min-width: 120px;
+      text-align: right;
+    }
+
+    .rb-bars {
+      display: flex;
+      flex: 1;
+      gap: 3px;
+      height: 42px;
+    }
+
+    .rb-bar {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-family: var(--font-mono);
+      border-radius: 4px;
+      padding: 0 14px;
+      white-space: nowrap;
+    }
+
+    .rb-bar.processing {
+      background: rgba(124,92,252,0.2);
+      border: 1px solid rgba(124,92,252,0.35);
+      color: var(--accent);
+    }
+
+    .rb-bar.dead {
+      background: rgba(240,96,96,0.12);
+      border: 1px solid rgba(240,96,96,0.25);
+      color: var(--accent-red);
+    }
+
+    .rb-bar.idle {
+      background: rgba(255,255,255,0.02);
+      border: 1px solid rgba(255,255,255,0.06);
+      color: var(--text-dim);
+    }
+
+    .rb-event {
+      text-align: center;
+      font-size: 16px;
+      color: var(--accent-warm);
+      padding: 14px 0;
+      font-weight: 600;
+      font-family: var(--font-display);
+      letter-spacing: 0.02em;
+    }
+
+    .rb-result {
+      text-align: center;
+      margin-top: 14px;
+      font-size: 20px;
+      color: var(--accent-red);
+      font-weight: 600;
+      font-family: var(--font-display);
+    }
+
+    /* ============================================
+       COMPARISON MATRIX
+       ============================================ */
+    .comparison-matrix {
+      margin-top: 24px;
+    }
+
+    .cm-row {
+      display: grid;
+      grid-template-columns: 150px repeat(3, 1fr);
+      align-items: center;
+      padding: 14px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+
+    .cm-row.cm-header {
+      padding-bottom: 16px;
+      border-bottom: 2px solid rgba(255,255,255,0.1);
+    }
+
+    .cm-header .cm-cell {
+      font-family: var(--font-display);
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-align: center;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+
+    .cm-cell {
+      font-size: 24px;
+      text-align: center;
+      color: var(--text-secondary);
+    }
+
+    .cm-cell.cm-lib {
+      text-align: left;
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 22px;
+      color: var(--text-primary);
+    }
+
+    .cm-yes { color: var(--accent-green); }
+    .cm-no { color: var(--accent-red); opacity: 0.6; }
+    .cm-partial { color: var(--accent-warm); }
+
+    .cm-row.cm-highlight {
+      background: rgba(124,92,252,0.1);
+      border-radius: 8px;
+      margin: 4px -16px;
+      padding: 14px 16px;
+      border-bottom: none;
+    }
+
+    .cm-highlight .cm-lib { color: var(--accent); }
+
+    /* ============================================
+       THREE-UP SUMMARY CARDS
+       ============================================ */
+    .three-up {
+      display: flex;
+      gap: 16px;
+      margin-top: 20px;
+    }
+
+    .summary-card {
+      flex: 1;
+      min-width: 0;
+      background: var(--bg-elevated);
+      border-radius: var(--radius);
+      padding: 22px 18px;
+      border-top: 4px solid var(--accent);
+    }
+
+    .summary-card .card-num {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      color: var(--accent);
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+
+    .summary-card h3 {
+      font-family: var(--font-display);
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 10px;
+      line-height: 1.3;
+    }
+
+    .summary-card p {
+      font-size: 16px;
+      color: var(--text-secondary);
+      line-height: 1.45;
+    }
+
+    /* ============================================
+       CTA SLIDE
+       ============================================ */
+    .slide.cta {
+      background: var(--bg-deep);
+    }
+
+    .slide.cta::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(ellipse at 80% 80%, rgba(124,92,252,0.1) 0%, transparent 50%),
+        radial-gradient(ellipse at 20% 20%, rgba(124,92,252,0.04) 0%, transparent 40%);
+    }
+
+    .cta-items {
+      margin-top: 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .cta-item {
+      font-size: 26px;
+      color: var(--text-body);
+      padding-left: 32px;
+      position: relative;
+      line-height: 1.4;
+    }
+
+    .cta-item::before {
+      content: '\25B8';
+      position: absolute;
+      left: 0;
+      color: var(--accent);
+    }
+
+    .cta-item strong { color: var(--text-primary); }
+
+    .cta-repo {
+      margin-top: 36px;
+      font-size: 22px;
+      color: var(--accent);
+      font-family: var(--font-mono);
+    }
+
+    .speakers-row {
+      margin-top: 40px;
+      display: flex;
+      gap: 48px;
+    }
+
+    .speaker {
+      font-size: 20px;
+      color: var(--text-secondary);
+    }
+
+    .speaker strong {
+      display: block;
+      color: var(--text-primary);
+      font-size: 22px;
+      font-family: var(--font-display);
+    }
+
+    .cta-close {
+      margin-top: 32px;
+      font-size: 22px;
+      font-style: italic;
+      color: var(--text-secondary);
+    }
+
+    /* ============================================
+       IMAGE PLACEHOLDERS
+       ============================================ */
+    .img-placeholder {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 24px;
+      background: linear-gradient(135deg, rgba(124,92,252,0.04) 0%, rgba(124,92,252,0.01) 100%);
+      border: 1px dashed rgba(124,92,252,0.2);
+      border-radius: var(--radius);
+      text-align: center;
+    }
+
+    .img-placeholder .img-icon {
+      font-size: 24px;
+      color: rgba(124,92,252,0.25);
+      line-height: 1;
+    }
+
+    .img-placeholder .img-desc {
+      font-size: 14px;
+      color: rgba(124,92,252,0.4);
+      font-family: var(--font-body);
+      max-width: 320px;
+      line-height: 1.4;
+    }
+
+    .img-placeholder .img-spec {
+      font-size: 11px;
+      color: rgba(124,92,252,0.2);
+      font-family: var(--font-mono);
+    }
+
+    /* Callout box */
+    .callout {
+      margin-top: 32px;
+      background: var(--bg-elevated);
+      border-radius: 8px;
+      padding: 22px 28px;
+      border-left: 4px solid var(--accent-warm);
+    }
+
+    .callout p:first-child {
+      font-size: 22px;
+      color: var(--accent-warm);
+      font-weight: 700;
+    }
+
+    .callout p + p {
+      font-size: 19px;
+      color: var(--text-secondary);
+      margin-top: 6px;
+    }
+
+    /* ============================================
+       PRINT STYLES
+       ============================================ */
+    @media print {
+      body { background: white; }
+      .slide { break-after: page; margin: 0; }
+      .slide::after, .slide::before { display: none; }
+    }
+  </style>
+</head>
+<body>
+<!-- ====================================================
+     SLIDE 1: Title
+     ==================================================== -->
+<div class="slide title-slide" id="slide-1">
+  <img src="images/img-slide01.png" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0.15;z-index:0;pointer-events:none;">
+  <h1>Distilling<br><span>the Stream</span></h1>
+  <p class="subtitle">Kafka-Backed Elixir at Scale</p>
+  <p class="speakers">Piotr Rybarczyk &amp; Anton Borisov — Fresha</p>
+  <p class="conference">Code BEAM / ElixirConf 2026</p>
+  <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
+</div>
+
+<!-- ====================================================
+     SLIDE 1: Hook — sharper incident
+     ==================================================== -->
+<div class="slide incident" id="slide-2">
+  <div class="incident-label">Client Notifications — Third Event-Driven Service</div>
+  <h2>Production rollout.<br>Not everything goes according to plan.</h2>
+  <blockquote>"Clients are receiving duplicate messages.<br>Or none at all."</blockquote>
+  <p style="margin-top: 32px; font-size: 22px; color: var(--text-dim);">
+    This talk is about how we fixed that.<br>And everything else.
+  </p>
+  <img src="images/img-slide02-bells.png" alt="Duplicate notifications" style="position: absolute; top: 40px; right: 56px; width: 180px; height: 180px; object-fit: contain; z-index: 2; opacity: 0.85; border-radius: 12px;">
+  <div class="slide-footer">Distilling the Stream</div>
+  <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
+  <!-- SPEAKER: "Our first event-driven service. Client Notifications. We rolled it out to production and... clients got the same notification twice. Or didn't get one at all. Not everything goes according to plan." Pause. Then: "This talk is about how we fixed that. And everything else." -->
+</div>
+
+<!-- ====================================================
+     SLIDE 3: What is Kafka
+     ==================================================== -->
+<div class="slide" id="slide-3" style="padding: 40px 60px;">
+  <h2>What is <span class="accent">Kafka</span>?</h2>
+
+  <div style="display: flex; align-items: center; gap: 16px; margin-top: 8px; flex: 1;">
+
+    <!-- Producers -->
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 14px; min-width: 110px;">
+      <div style="font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary); letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 2px;">Producers</div>
+      <div style="background: rgba(232,168,56,0.12); border: 2px solid rgba(232,168,56,0.5); border-radius: 8px; padding: 9px 22px; font-family: var(--font-display); font-weight: 600; color: var(--accent-warm); font-size: 16px; text-align: center; width: 110px;">App A</div>
+      <div style="background: rgba(232,168,56,0.12); border: 2px solid rgba(232,168,56,0.5); border-radius: 8px; padding: 9px 22px; font-family: var(--font-display); font-weight: 600; color: var(--accent-warm); font-size: 16px; text-align: center; width: 110px;">App B</div>
+      <div style="background: rgba(232,168,56,0.12); border: 2px solid rgba(232,168,56,0.5); border-radius: 8px; padding: 9px 22px; font-family: var(--font-display); font-weight: 600; color: var(--accent-warm); font-size: 16px; text-align: center; width: 110px;">App C</div>
+    </div>
+
+    <!-- Arrows left -->
+    <div style="display: flex; flex-direction: column; gap: 14px; padding-top: 22px;">
+      <div style="color: var(--text-dim); font-size: 20px; line-height: 38px;">&#8594;</div>
+      <div style="color: var(--text-dim); font-size: 20px; line-height: 38px;">&#8594;</div>
+      <div style="color: var(--text-dim); font-size: 20px; line-height: 38px;">&#8594;</div>
+    </div>
+
+    <!-- Kafka Cluster -->
+    <div style="flex: 1; border: 2px dashed rgba(240,96,96,0.35); border-radius: 12px; padding: 18px 20px 16px 20px; position: relative;">
+      <div style="font-family: var(--font-display); font-size: 13px; font-weight: 700; color: var(--accent-red); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 14px;">Kafka Cluster</div>
+
+      <!-- Brokers row -->
+      <div style="display: flex; gap: 14px; justify-content: center;">
+        <!-- Broker 0 -->
+        <div style="background: rgba(240,96,96,0.07); border: 1px solid rgba(240,96,96,0.2); border-radius: 8px; padding: 10px 12px; flex: 1; max-width: 200px;">
+          <div style="font-family: var(--font-display); font-size: 13px; font-weight: 700; color: var(--accent-red); margin-bottom: 8px; text-align: center;">Broker 0</div>
+          <div style="display: flex; gap: 6px; justify-content: center;">
+            <div style="text-align: center;">
+              <div style="font-family: var(--font-mono); font-size: 10px; color: var(--accent-green); margin-bottom: 3px;">T1-P0</div>
+              <div style="width: 70px; height: 24px; background: repeating-linear-gradient(180deg, rgba(92,232,180,0.3) 0px, rgba(92,232,180,0.3) 4px, rgba(92,232,180,0.06) 4px, rgba(92,232,180,0.06) 7px); border-radius: 3px; border: 1px solid rgba(92,232,180,0.15);"></div>
+            </div>
+            <div style="text-align: center;">
+              <div style="font-family: var(--font-mono); font-size: 10px; color: var(--accent-green); margin-bottom: 3px;">T2-P1</div>
+              <div style="width: 70px; height: 24px; background: repeating-linear-gradient(180deg, rgba(92,232,180,0.3) 0px, rgba(92,232,180,0.3) 4px, rgba(92,232,180,0.06) 4px, rgba(92,232,180,0.06) 7px); border-radius: 3px; border: 1px solid rgba(92,232,180,0.15);"></div>
+            </div>
+          </div>
+        </div>
+        <!-- Broker 1 -->
+        <div style="background: rgba(240,96,96,0.07); border: 1px solid rgba(240,96,96,0.2); border-radius: 8px; padding: 10px 12px; flex: 1; max-width: 200px;">
+          <div style="font-family: var(--font-display); font-size: 13px; font-weight: 700; color: var(--accent-red); margin-bottom: 8px; text-align: center;">Broker 1</div>
+          <div style="display: flex; gap: 6px; justify-content: center;">
+            <div style="text-align: center;">
+              <div style="font-family: var(--font-mono); font-size: 10px; color: var(--accent-green); margin-bottom: 3px;">T3-P0</div>
+              <div style="width: 70px; height: 24px; background: repeating-linear-gradient(180deg, rgba(92,232,180,0.3) 0px, rgba(92,232,180,0.3) 4px, rgba(92,232,180,0.06) 4px, rgba(92,232,180,0.06) 7px); border-radius: 3px; border: 1px solid rgba(92,232,180,0.15);"></div>
+            </div>
+            <div style="text-align: center;">
+              <div style="font-family: var(--font-mono); font-size: 10px; color: var(--accent-green); margin-bottom: 3px;">T4-P1</div>
+              <div style="width: 70px; height: 24px; background: repeating-linear-gradient(180deg, rgba(92,232,180,0.3) 0px, rgba(92,232,180,0.3) 4px, rgba(92,232,180,0.06) 4px, rgba(92,232,180,0.06) 7px); border-radius: 3px; border: 1px solid rgba(92,232,180,0.15);"></div>
+            </div>
+          </div>
+        </div>
+        <!-- Broker 2 -->
+        <div style="background: rgba(240,96,96,0.07); border: 1px solid rgba(240,96,96,0.2); border-radius: 8px; padding: 10px 12px; flex: 1; max-width: 200px;">
+          <div style="font-family: var(--font-display); font-size: 13px; font-weight: 700; color: var(--accent-red); margin-bottom: 8px; text-align: center;">Broker 2</div>
+          <div style="display: flex; gap: 6px; justify-content: center;">
+            <div style="text-align: center;">
+              <div style="font-family: var(--font-mono); font-size: 10px; color: var(--accent-green); margin-bottom: 3px;">T1-P1</div>
+              <div style="width: 70px; height: 24px; background: repeating-linear-gradient(180deg, rgba(92,232,180,0.3) 0px, rgba(92,232,180,0.3) 4px, rgba(92,232,180,0.06) 4px, rgba(92,232,180,0.06) 7px); border-radius: 3px; border: 1px solid rgba(92,232,180,0.15);"></div>
+            </div>
+            <div style="text-align: center;">
+              <div style="font-family: var(--font-mono); font-size: 10px; color: var(--accent-green); margin-bottom: 3px;">T2-P2</div>
+              <div style="width: 70px; height: 24px; background: repeating-linear-gradient(180deg, rgba(92,232,180,0.3) 0px, rgba(92,232,180,0.3) 4px, rgba(92,232,180,0.06) 4px, rgba(92,232,180,0.06) 7px); border-radius: 3px; border: 1px solid rgba(92,232,180,0.15);"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Annotation -->
+      <div style="text-align: center; margin-top: 14px; font-family: var(--font-mono); font-size: 13px; color: var(--text-secondary);">
+        Topics &#8594; Partitions &#8594; Segments (append-only log)
+      </div>
+
+      <!-- ZooKeeper / KRaft -->
+      <div style="text-align: center; margin-top: 10px;">
+        <span style="display: inline-block; background: rgba(124,92,252,0.1); border: 1px solid rgba(124,92,252,0.3); border-radius: 6px; padding: 4px 16px; font-family: var(--font-mono); font-size: 12px; color: var(--accent);">ZooKeeper / KRaft (metadata)</span>
+      </div>
+    </div>
+
+    <!-- Arrows right -->
+    <div style="display: flex; flex-direction: column; gap: 14px; padding-top: 22px;">
+      <div style="color: var(--text-dim); font-size: 20px; line-height: 38px;">&#8594;</div>
+      <div style="color: var(--text-dim); font-size: 20px; line-height: 38px;">&#8594;</div>
+      <div style="color: var(--text-dim); font-size: 20px; line-height: 38px;">&#8594;</div>
+    </div>
+
+    <!-- Consumers -->
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 14px; min-width: 110px;">
+      <div style="font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary); letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 2px;">Consumers</div>
+      <div style="background: rgba(92,232,180,0.12); border: 2px solid rgba(92,232,180,0.4); border-radius: 8px; padding: 9px 22px; font-family: var(--font-display); font-weight: 600; color: var(--accent-green); font-size: 16px; text-align: center; width: 110px;">Svc X</div>
+      <div style="background: rgba(92,232,180,0.12); border: 2px solid rgba(92,232,180,0.4); border-radius: 8px; padding: 9px 22px; font-family: var(--font-display); font-weight: 600; color: var(--accent-green); font-size: 16px; text-align: center; width: 110px;">Svc Y</div>
+      <div style="background: rgba(92,232,180,0.12); border: 2px solid rgba(92,232,180,0.4); border-radius: 8px; padding: 9px 22px; font-family: var(--font-display); font-weight: 600; color: var(--accent-green); font-size: 16px; text-align: center; width: 110px;">Svc Z</div>
+    </div>
+  </div>
+
+  <!-- TCP callout -->
+  <div style="text-align: center; margin-top: 18px;">
+    <span style="display: inline-block; border: 2px dashed rgba(232,168,56,0.35); border-radius: 24px; padding: 8px 32px; font-family: var(--font-mono); font-size: 14px; color: var(--accent-warm);">Every arrow = TCP connection carrying binary request/response pairs</span>
+  </div>
+
+  <!-- Properties -->
+  <div style="text-align: center; margin-top: 16px; font-family: var(--font-display); font-size: 16px; color: var(--text-secondary); letter-spacing: 0.04em;">
+    Durable &nbsp;&nbsp;|&nbsp;&nbsp; Ordered &nbsp;&nbsp;|&nbsp;&nbsp; Append-only &nbsp;&nbsp;|&nbsp;&nbsp; Partitioned &nbsp;&nbsp;|&nbsp;&nbsp; Replicated
+  </div>
+
+  <div class="slide-footer">Distilling the Stream</div>
+  <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
+  <!-- SPEAKER: "Quick orientation for those who haven't worked with Kafka directly. Producers send messages. Brokers store them in partitioned, append-only logs. Consumers read them. Every arrow here is a TCP connection speaking the Kafka binary protocol — that's what Kayrock implements." -->
+</div>
+
+<!-- ====================================================
+     SLIDE 4: How the Pieces Fit Together
+     ==================================================== -->
+<div class="slide" id="slide-5" style="padding: 36px 60px;">
+  <h2>How the Pieces <span class="accent">Fit Together</span></h2>
+
+  <div style="display: flex; align-items: stretch; gap: 24px; flex: 1; margin-top: 4px;">
+
+    <!-- Client-side label -->
+    <div style="display: flex; align-items: flex-start; padding-top: 8px;">
+      <span style="font-family: var(--font-mono); font-size: 12px; color: var(--text-dim); writing-mode: vertical-lr; text-orientation: mixed; transform: rotate(180deg); letter-spacing: 0.1em;">Client side</span>
+    </div>
+
+    <!-- Main stack -->
+    <div style="flex: 1; display: flex; flex-direction: column; gap: 8px;">
+
+      <!-- Client Notifications -->
+      <div style="background: rgba(255,255,255,0.04); border: 2px solid rgba(255,255,255,0.12); border-radius: 10px; padding: 12px 22px;">
+        <div style="font-family: var(--font-display); font-size: 16px; font-weight: 700; color: var(--text-primary);">Client Notifications</div>
+        <div style="font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary); margin-top: 3px;">produce() / fetch() / create_topic() / consumer groups</div>
+      </div>
+
+      <!-- Arrow down -->
+      <div style="text-align: center; color: var(--text-dim); font-size: 16px; line-height: 1;">&#9660;</div>
+
+      <!-- Kafkaesque (framework — the main subject of the talk) -->
+      <div style="background: rgba(124,92,252,0.1); border: 3px solid rgba(124,92,252,0.6); border-radius: 10px; padding: 12px 22px; box-shadow: 0 0 20px rgba(124,92,252,0.12), inset 0 0 20px rgba(124,92,252,0.04);">
+        <div style="display: flex; align-items: baseline; gap: 12px; margin-bottom: 8px;">
+          <span style="font-family: var(--font-mono); font-size: 18px; font-weight: 700; color: var(--accent);">kafkaesque</span>
+          <span style="font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary);">(framework — plugins, DLQ, observability, health checks, idempotency)</span>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <div style="flex: 1; background: rgba(124,92,252,0.08); border: 1px solid rgba(124,92,252,0.25); border-radius: 6px; padding: 6px 10px;">
+            <div style="font-family: var(--font-mono); font-size: 11px; color: var(--text-body);">Consumer<br>Supervisor</div>
+          </div>
+          <div style="flex: 1; background: rgba(124,92,252,0.08); border: 1px solid rgba(124,92,252,0.25); border-radius: 6px; padding: 6px 10px;">
+            <div style="font-family: var(--font-mono); font-size: 11px; color: var(--text-body);">Plugin<br>Pipeline</div>
+          </div>
+          <div style="flex: 1; background: rgba(124,92,252,0.08); border: 1px solid rgba(124,92,252,0.25); border-radius: 6px; padding: 6px 10px;">
+            <div style="font-family: var(--font-mono); font-size: 11px; color: var(--text-body);">Dead Letter<br>Queue</div>
+          </div>
+          <div style="flex: 1; background: rgba(124,92,252,0.08); border: 1px solid rgba(124,92,252,0.25); border-radius: 6px; padding: 6px 10px;">
+            <div style="font-family: var(--font-mono); font-size: 11px; color: var(--text-body);">Telemetry</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Arrow down -->
+      <div style="text-align: center; color: var(--text-dim); font-size: 16px; line-height: 1;">&#9660;</div>
+
+      <!-- kafka_ex -->
+      <div style="background: rgba(232,168,56,0.08); border: 2px solid rgba(232,168,56,0.35); border-radius: 10px; padding: 10px 22px;">
+        <div style="display: flex; align-items: baseline; gap: 12px; margin-bottom: 8px;">
+          <span style="font-family: var(--font-mono); font-size: 16px; font-weight: 700; color: var(--accent-warm);">kafka_ex</span>
+          <span style="font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary);">(Elixir client library)</span>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <div style="flex: 1; background: rgba(232,168,56,0.06); border: 1px solid rgba(232,168,56,0.18); border-radius: 6px; padding: 8px 12px;">
+            <div style="font-family: var(--font-mono); font-size: 12px; color: var(--text-body);">Connection<br>Manager</div>
+          </div>
+          <div style="flex: 1; background: rgba(232,168,56,0.06); border: 1px solid rgba(232,168,56,0.18); border-radius: 6px; padding: 8px 12px;">
+            <div style="font-family: var(--font-mono); font-size: 12px; color: var(--text-body);">Partition<br>Router</div>
+          </div>
+          <div style="flex: 1; background: rgba(232,168,56,0.06); border: 1px solid rgba(232,168,56,0.18); border-radius: 6px; padding: 8px 12px;">
+            <div style="font-family: var(--font-mono); font-size: 12px; color: var(--text-body);">Consumer<br>Groups</div>
+          </div>
+          <div style="flex: 1; background: rgba(232,168,56,0.06); border: 1px solid rgba(232,168,56,0.18); border-radius: 6px; padding: 8px 12px;">
+            <div style="font-family: var(--font-mono); font-size: 12px; color: var(--text-body);">Version<br>Negotiation</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Arrow down -->
+      <div style="text-align: center; color: var(--text-dim); font-size: 16px; line-height: 1;">&#9660;</div>
+
+      <!-- kayrock -->
+      <div style="background: rgba(124,92,252,0.06); border: 2px solid rgba(124,92,252,0.3); border-radius: 10px; padding: 10px 22px;">
+        <div style="display: flex; align-items: baseline; gap: 12px; margin-bottom: 8px;">
+          <span style="font-family: var(--font-mono); font-size: 16px; font-weight: 700; color: var(--accent);">kayrock</span>
+          <span style="font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary);">(generated protocol layer)</span>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <div style="flex: 1; background: rgba(124,92,252,0.06); border: 1px solid rgba(124,92,252,0.15); border-radius: 6px; padding: 8px 12px;">
+            <div style="font-family: var(--font-mono); font-size: 12px; color: var(--text-body);">Struct<br>Definitions</div>
+          </div>
+          <div style="flex: 1.3; background: rgba(124,92,252,0.06); border: 1px solid rgba(124,92,252,0.15); border-radius: 6px; padding: 8px 12px;">
+            <div style="font-family: var(--font-mono); font-size: 12px; color: var(--text-body);">serialize/1<br>(struct&#8594;bytes)</div>
+          </div>
+          <div style="flex: 1.3; background: rgba(124,92,252,0.06); border: 1px solid rgba(124,92,252,0.15); border-radius: 6px; padding: 8px 12px;">
+            <div style="font-family: var(--font-mono); font-size: 12px; color: var(--text-body);">deserialize/1<br>(bytes&#8594;struct)</div>
+          </div>
+          <div style="flex: 1; background: rgba(124,92,252,0.06); border: 1px solid rgba(124,92,252,0.15); border-radius: 6px; padding: 8px 12px;">
+            <div style="font-family: var(--font-mono); font-size: 12px; color: var(--text-body);">Version<br>Metadata</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- compile-time arrow -->
+      <div style="text-align: center; color: var(--accent-red); font-size: 11px; font-family: var(--font-mono); line-height: 1;">&#9660; <span style="color: var(--text-dim);">compile-time</span></div>
+
+      <!-- kpro_schema -->
+      <div style="background: rgba(92,232,180,0.06); border: 2px solid rgba(92,232,180,0.25); border-radius: 10px; padding: 8px 22px;">
+        <div style="display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;">
+          <span style="font-family: var(--font-mono); font-size: 16px; font-weight: 700; color: var(--accent-green);">kpro_schema</span>
+          <span style="font-family: var(--font-mono); font-size: 13px; color: var(--text-secondary);">(Erlang library &mdash; schemas extracted from Kafka Java source)</span>
+        </div>
+        <div style="font-family: var(--font-mono); font-size: 12px; color: var(--text-dim); margin-top: 6px;">req(:produce, 0) &#8594; [acks: :int16, timeout: :int32, topic_data: {:array, ...</div>
+      </div>
+    </div>
+
+    <!-- TCP arrows + Kafka Broker -->
+    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; min-width: 100px; padding-top: 20px;">
+      <div style="font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); letter-spacing: 0.05em;">TCP</div>
+      <div style="color: var(--text-dim); font-size: 20px;">&#8594;</div>
+      <div style="background: rgba(240,96,96,0.12); border: 2px solid rgba(240,96,96,0.35); border-radius: 10px; padding: 20px 18px; text-align: center;">
+        <div style="font-family: var(--font-display); font-size: 16px; font-weight: 700; color: var(--accent-red);">Kafka<br>Broker</div>
+      </div>
+      <div style="color: var(--text-dim); font-size: 20px;">&#8592;</div>
+      <div style="font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); letter-spacing: 0.05em;">TCP</div>
+    </div>
+  </div>
+
+  <div class="slide-footer">Distilling the Stream</div>
+  <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
+  <!-- SPEAKER: "Walk this bottom-up. kpro_schema gives us the Kafka protocol definitions — extracted from the Java source at compile time. Kayrock generates Elixir structs and serializers from those schemas. KafkaEx uses Kayrock to manage connections, routing, and consumer groups. Your app calls produce() and fetch() — it never touches bytes." -->
+</div>
+
+<!-- ====================================================
+     SLIDE 4: Scale / Context — with metrics
+     ==================================================== -->
+<div class="slide" id="slide-6">
+  <img src="images/img-slide-5.png" alt="" style="position:absolute;right:-40px;top:50%;transform:translateY(-50%);width:420px;height:420px;object-fit:contain;opacity:0.2;z-index:0;pointer-events:none;">
+  <h2>Why Does This Matter?</h2>
+  <ul>
+    <li>Fresha: global marketplace for salons &amp; spas</li>
+    <li>Tens of millions of Kafka messages per day across dozens of Elixir services</li>
+    <li>Teams used Kaffe, Brod, Broadway, KafkaEx — everyone picked their own</li>
+    <li>Every team built their own metrics, alerts &amp; traces from scratch</li>
+    <li>Today: one framework, one pattern, consistent across the org</li>
+  </ul>
+  <div class="slide-footer">Distilling the Stream</div>
+  <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
+  <!-- SPEAKER: Set the stakes. "We had four different Kafka libraries in production. Each team built their own observability. When something broke at 2 AM, you had to figure out which library, which metrics, which alerts applied to this service." -->
+</div>
+
+<!-- ====================================================
+     SLIDE 5: Pillar 1 Divider
+     ==================================================== -->
+<div class="slide divider" id="slide-7">
+  <div class="pillar-number">1</div>
+  <h2>DevEx &amp;<br>Velocity</h2>
+  <p class="divider-sub">Convention over configuration. At scale.</p>
+  <p class="divider-byline">— Piotr Rybarczyk</p>
+  <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
+  <!-- SPEAKER: Piotr takes over. "We solved the DX problem first. Because if engineers can't use the framework, nothing else matters." -->
+</div>
+
+<!-- ====================================================
+     SLIDE 6: Incident — boilerplate chaos
+     ==================================================== -->
+<div class="slide incident" id="slide-8">
+  <div class="incident-label">The Problem</div>
+  <h2>"How do I consume a Kafka topic?"</h2>
+  <ul style="margin-top: 24px;">
+    <li>50+ services. Each consumer slightly different.</li>
+    <li>At worst, no shared monitoring at all</li>
+    <li>New engineer asks Slack — gets 5 different answers</li>
+    <li><b>On call</b>, 2 AM alert: "consumer is down" — but which pattern is this one?</li>
+  </ul>
+  <div class="slide-footer">Distilling the Stream</div>
+  <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
+  <!-- SPEAKER: This is painful. When something goes wrong at 2 AM, you're reading five different consumer implementations to figure out which one applies here. -->
+</div>
+
+<!-- ====================================================
+     SLIDE 7: Before / After code — font-size fixed
+     ==================================================== -->
+<div class="slide code-slide" id="slide-9">
+  <h2>Before <span class="accent">&rarr;</span> After</h2>
+  <div class="code-columns">
+    <div class="code-col">
+      <h3>Before (raw KafkaEx)</h3>
+      <pre><span class="kw">defmodule</span> <span class="fn">MyApp.ConsumerSupervisor</span> <span class="kw">do</span>
+  <span class="kw">use</span> Supervisor
+
+  <span class="kw">def</span> <span class="fn">init</span>(_opts) <span class="kw">do</span>
+    children <span class="op">=</span> [
+      <span class="cm"># 15 more lines of boilerplate...</span>
+      {KafkaEx.ConsumerGroup, [
+        group: <span class="st">"my-group"</span>,
+        topics: [<span class="st">"my-topic"</span>],
+        handler: <span class="fn">MyHandler</span>
+      ]}
+    ]
+    Supervisor.init(children,
+      strategy: <span class="nm">:one_for_one</span>)
+  <span class="kw">end</span>
+<span class="kw">end</span></pre>
+    </div>
+    <div class="code-col">
+      <h3>After (Kafkaesque)</h3>
+      <pre><span class="kw">defmodule</span> <span class="fn">MyApp.ConsumerSupervisor</span> <span class="kw">do</span>
+  <span class="kw">use</span> <span class="hl">Kafkaesque.ConsumerSupervisor</span>,
+    consumer_group_identifier: Application.compile_env!(<span class="nm">:myapp</span>, <span class="nm">:consumer_group</span>),
+    topics: Application.compile_env!(<span class="nm">:myapp</span>, <span class="nm">:topics</span>),
+    message_handler: <span class="fn">MyApp.Handler</span>
+<span class="kw">end</span>
+
+<span class="cm"># Add to your supervision tree. Done.</span></pre>
+    </div>
+  </div>
+  <div class="slide-footer">Distilling the Stream</div>
+  <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
+  <!-- SPEAKER: The after version is what every engineer writes. The before version is what they no longer have to understand. -->
+</div>
+
+<!-- ====================================================
+     SLIDE 8: Everything in One Module
+     ==================================================== -->
+<div class="slide" id="slide-10">
+  <h2>One Module. <span class="accent">Everything Included.</span></h2>
+  <ul>
+    <li><strong style="color: var(--text-primary);">Telemetry metrics</strong> — consumer lag, processing time, error rates, all standard</li>
+    <li><strong style="color: var(--text-primary);">Distributed tracing</strong> — propagated across producer &rarr; consumer boundaries</li>
+    <li><strong style="color: var(--text-primary);">Protobuf decoding</strong> — schema-based deserialization as a plugin</li>
+    <li><strong style="color: var(--text-primary);">Dead letter queue</strong> — failed messages routed, not lost</li>
+  </ul>
+  <p style="margin-top: 24px; font-size: 22px; color: var(--text-dim);">
+    Plus health checks, topic prefixing, and more — all in one <code style="color: var(--accent); font-family: var(--font-mono);">use Kafkaesque.ConsumerSupervisor</code> call.
+  </p>
+  <div class="slide-footer">Distilling the Stream</div>
+  <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
+  <!-- SPEAKER: "Every one of these used to be hand-rolled per service. Telemetry? Each team had their own metrics. Tracing? Maybe, if someone remembered. Now it's all in one module. You use ConsumerSupervisor, you get everything." -->
+</div>
+
+<!-- ====================================================
+     SLIDE 9: Plugin System — middleware chain
+     ==================================================== -->
+<div class="slide code-slide" id="slide-11">
+  <h2>Plugins: <span class="accent">Composable Middleware</span></h2>
+  <pre><span class="kw">use</span> Kafkaesque.Consumer,
+  topics_config: %{
+    <span class="st">"appointment_events"</span> <span class="op">=&gt;</span> %{
+      decoder_config: {<span class="fn">DebeziumProtoDecoder</span>,
+        [schema: <span class="fn">AppointmentEventEnvelope</span>]},
+      <span class="hl">handle_message_plugins: [</span>
+      <span class="hl">  {KafkaesqueAddons.Plugins.UUIDIdempotencyPlugin,</span>
+      <span class="hl">    [strategy: EctoInboxStrategy]}</span>
+      <span class="hl">],</span>
+      dead_letter_producer: {
+        <span class="fn">Kafkaesque.DeadLetterQueue.KafkaTopicProducer</span>,
+        [topic: <span class="st">"appointment_events.dlq"</span>]}
+    }
+  }</pre>
+  <p class="code-caption">
+    Per-topic pipeline. Each plugin wraps the next &rarr; composable, testable, reusable.
+  </p>
+  <div class="slide-footer">Distilling the Stream</div>
+  <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
+  <!-- SPEAKER: "Plugins form a middleware chain — each one wraps the next. UUIDIdempotencyPlugin checks the inbox before processing. Protobuf decoder unwraps the envelope. DLQ catches failures. All per-topic, all composable. You can write your own plugin in ~30 lines — just implement handle_message/4." -->
+</div>
+
+<!-- ====================================================
+     SLIDE 10: Pillar 1 Takeaway
+     ==================================================== -->
+<div class="slide takeaway" id="slide-12">
+  <h2>Pillar 1 Takeaway</h2>
+  <p class="takeaway-text">Write the boilerplate once.<br>Let your team focus on business logic.</p>
+  <p style="margin-top: 28px; font-size: 22px; color: #666;">
+    Convention over configuration is not just a Rails idea.<br>
+    It's how you scale a team's Kafka knowledge across an org.
+  </p>
+  <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
+</div>
+
+<!-- ====================================================
+     SLIDE 11: Pillar 2 Divider
+     ==================================================== -->
+<div class="slide divider" id="slide-13">
+  <div class="pillar-number">2</div>
+  <h2>Resilience via<br>Outbox, Inbox &amp; Idempotency</h2>
+  <p class="divider-sub">At-least-once delivery is a feature. Duplicates are not.</p>
+  <p class="divider-byline">— Piotr Rybarczyk</p>
+  <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
+  <!-- SPEAKER: Colleague takes over. Bridge from P1: "We solved the DX problem. But there's a more dangerous problem waiting — what happens when Kafka delivers a message twice?" -->
+</div>
+
+<!-- ====================================================
+     SLIDE 12: Incident — duplicates + rebalance diagram
+     ==================================================== -->
+<div class="slide incident" id="slide-14">
+  <div class="incident-label">The Problem</div>
+  <h2>Same event. Processed twice.</h2>
+  <!-- IMAGE: Replace this .rb-diagram with a professional sequence diagram (800×250px) showing consumer rebalance → duplicate delivery -->
+  <div class="rb-diagram">
+    <div class="rb-row">
+      <div class="rb-label">Consumer A</div>
+      <div class="rb-bars">
+        <div class="rb-bar processing" style="flex: 3;">Processing msg #42</div>
+        <div class="rb-bar dead" style="flex: 1;">&#x2717; Dead</div>
+      </div>
+    </div>
+    <div class="rb-event">&#9889; Broker restart triggers rebalance</div>
+    <div class="rb-row">
+      <div class="rb-label">Consumer B</div>
+      <div class="rb-bars">
+        <div class="rb-bar idle" style="flex: 2;">Idle</div>
+        <div class="rb-bar processing" style="flex: 2;">Re-processes msg #42</div>
+      </div>
+    </div>
+    <div class="rb-result">Message #42 processed <strong>twice</strong></div>
+  </div>
+  <p style="margin-top: 16px; font-size: 20px; color: var(--text-dim);">
+    This is not a bug. This is Kafka. At-least-once delivery is the contract.
+  </p>
+  <div class="slide-footer">Distilling the Stream</div>
+  <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
+  <!-- SPEAKER: Ask the room: "How many of you have hit this? Duplicate events in production?" Hands go up. "Good — you're in good company." Then explain the diagram. The point: you cannot fix this at the broker level. You fix it at the application level. -->
+</div>
+
+<!-- ====================================================
+     SLIDE 13: Domain idempotency — simplified
+     ==================================================== -->
+<div class="slide" id="slide-15">
+  <h2>Rule #1: <span class="accent">Domain-Level Idempotency First</span></h2>
+  <ul>
+    <li>Design business logic so processing the same event twice has no side effect</li>
+    <li>Use natural keys + unique constraints — let the database enforce it</li>
+  </ul>
+  <!-- Two-path diagram: naive vs idempotent handler -->
+  <div style="display: flex; gap: 32px; margin-top: 24px;">
+    <!-- Shared top -->
+    <div style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 0;">
+      <div style="font-family: var(--font-display); font-size: 13px; font-weight: 700; color: var(--accent-red); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 10px;">Naive Handler</div>
+      <div style="background: var(--bg-elevated); border: 1px solid rgba(240,96,96,0.2); border-radius: 6px; padding: 8px 16px; font-family: var(--font-mono); font-size: 13px; color: var(--text-body); width: 100%; text-align: center;">Message arrives</div>
+      <div style="color: var(--accent-red); font-size: 16px; line-height: 1.6;">&#9660;</div>
+      <div style="background: var(--bg-elevated); border: 1px solid rgba(240,96,96,0.2); border-radius: 6px; padding: 8px 16px; font-family: var(--font-mono); font-size: 13px; color: var(--text-body); width: 100%; text-align: center;">Side effect executes</div>
+      <div style="color: var(--accent-red); font-size: 16px; line-height: 1.6;">&#9660;</div>
+      <div style="background: var(--bg-elevated); border: 1px solid rgba(240,96,96,0.2); border-radius: 6px; padding: 8px 16px; font-family: var(--font-mono); font-size: 13px; color: var(--accent-warm); width: 100%; text-align: center;">Same message arrives again</div>
+      <div style="color: var(--accent-red); font-size: 16px; line-height: 1.6;">&#9660;</div>
+      <div style="background: var(--bg-elevated); border: 1px solid rgba(240,96,96,0.2); border-radius: 6px; padding: 8px 16px; font-family: var(--font-mono); font-size: 13px; color: var(--text-body); width: 100%; text-align: center;">Side effect executes <strong style="color: var(--accent-red);">AGAIN</strong></div>
+      <div style="color: var(--accent-red); font-size: 16px; line-height: 1.6;">&#9660;</div>
+      <div style="background: rgba(240,96,96,0.12); border: 2px solid rgba(240,96,96,0.4); border-radius: 6px; padding: 8px 16px; font-family: var(--font-display); font-size: 14px; font-weight: 700; color: var(--accent-red); width: 100%; text-align: center;">Duplicate effect</div>
+    </div>
+
+    <!-- Right: idempotent path -->
+    <div style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 0;">
+      <div style="font-family: var(--font-display); font-size: 13px; font-weight: 700; color: var(--accent-green); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 10px;">Idempotent Handler</div>
+      <div style="background: var(--bg-elevated); border: 1px solid rgba(92,232,180,0.2); border-radius: 6px; padding: 8px 16px; font-family: var(--font-mono); font-size: 13px; color: var(--text-body); width: 100%; text-align: center;">Message arrives</div>
+      <div style="color: var(--accent-green); font-size: 16px; line-height: 1.6;">&#9660;</div>
+      <div style="background: var(--bg-elevated); border: 1px solid rgba(92,232,180,0.2); border-radius: 6px; padding: 8px 16px; font-family: var(--font-mono); font-size: 13px; color: var(--text-body); width: 100%; text-align: center;">Check natural key / unique constraint</div>
+      <div style="color: var(--accent-green); font-size: 16px; line-height: 1.6;">&#9660;</div>
+      <div style="background: var(--bg-elevated); border: 1px solid rgba(92,232,180,0.2); border-radius: 6px; padding: 8px 16px; font-family: var(--font-mono); font-size: 13px; color: var(--accent-warm); width: 100%; text-align: center;">Same message arrives again</div>
+      <div style="color: var(--accent-green); font-size: 16px; line-height: 1.6;">&#9660;</div>
+      <div style="background: var(--bg-elevated); border: 1px solid rgba(92,232,180,0.2); border-radius: 6px; padding: 8px 16px; font-family: var(--font-mono); font-size: 13px; color: var(--text-body); width: 100%; text-align: center;">Duplicate detected &rarr; <strong style="color: var(--accent-green);">skip</strong></div>
+      <div style="color: var(--accent-green); font-size: 16px; line-height: 1.6;">&#9660;</div>
+      <div style="background: rgba(92,232,180,0.12); border: 2px solid rgba(92,232,180,0.4); border-radius: 6px; padding: 8px 16px; font-family: var(--font-display); font-size: 14px; font-weight: 700; color: var(--accent-green); width: 100%; text-align: center;">Same result</div>
+    </div>
+  </div>
+  <div class="callout">
+    <p>Idempotency is a design decision, not a library feature.</p>
+    <p>Infrastructure patterns help. They do not guarantee it.</p>
+  </div>
+  <div class="slide-footer">Distilling the Stream</div>
+  <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
+  <!-- SPEAKER: This is the most important slide in the talk. Domain-level first. Always. The Inbox pattern (next slide) is the safety net, not the strategy. -->
+</div>
+
+<!-- ====================================================
+     SLIDE 14: Inbox — two strategies as plugins
+     ==================================================== -->
+<div class="slide code-slide" id="slide-16">
+  <h2>The Inbox: <span class="accent">Two Strategies</span></h2>
+  <div class="code-columns">
+    <div class="code-col">
+      <h3>Ecto Strategy (Postgres)</h3>
+      <pre><span class="st">"payments"</span> <span class="op">=&gt;</span> %{
+  handle_message_plugins: [
+    {<span class="fn">UUIDIdempotencyPlugin</span>, [
+      <span class="hl">strategy: EctoInboxStrategy</span>
+    ]}
+  ]
+}
+
+<span class="cm"># UUID persisted in partitioned table</span>
+<span class="cm"># ~2ms overhead per message</span>
+<span class="cm"># Pruned with PgPartman</span></pre>
+    </div>
+    <div class="code-col">
+      <h3>Redis Strategy (high-throughput)</h3>
+      <pre><span class="st">"notifications"</span> <span class="op">=&gt;</span> %{
+  handle_message_plugins: [
+    {<span class="fn">UUIDIdempotencyPlugin</span>, [
+      <span class="hl">strategy: RedisInboxStrategy</span>
+    ]}
+  ]
+}
+
+<span class="cm"># UUID checked in Redis</span>
+<span class="cm"># Sub-ms overhead</span>
+<span class="cm"># TTL-based expiry</span></pre>
+    </div>
+  </div>
+  <p class="code-caption">
+    Same plugin, swappable strategy. Pick based on your throughput and durability needs.
+  </p>
+  <div class="slide-footer">Distilling the Stream</div>
+  <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
+  <!-- SPEAKER: "Same UUIDIdempotencyPlugin, two backends. Ecto strategy writes to a partitioned Postgres table — ~2ms, rock solid, PgPartman handles cleanup. Redis strategy for high-throughput topics where sub-millisecond matters. You choose per-topic." -->
+</div>
+
+<!-- ====================================================
+     SLIDE 15: Transactional Outbox + CDC
+     ==================================================== -->
+<div class="slide code-slide" id="slide-17">
+  <h2>The Other Side: <span class="accent">Transactional Outbox + CDC</span></h2>
+  <pre><span class="cm"># Domain change + event in ONE database transaction</span>
+<span class="kw">def</span> <span class="fn">confirm_appointment</span>(appointment, params) <span class="kw">do</span>
+  changeset = Appointment.confirm_changeset(appointment, params)
+
+  Multi.new()
+  <span class="op">|&gt;</span> Multi.update(<span class="nm">:appointment</span>, changeset)
+  <span class="op">|&gt;</span> Multi.run(<span class="nm">:outbox</span>, <span class="kw">fn</span> repo, <span class="hl">%{appointment: confirmed}</span> <span class="op">-&gt;</span>
+    repo.insert(<span class="hl">%OutboxEvent{</span>
+      <span class="hl">topic_name: <span class="st">"appointments.events-v1"</span>,</span>
+      <span class="hl">event_type: <span class="st">"appointment_confirmed"</span>,</span>
+      <span class="hl">partition_key: confirmed.provider_id,</span>
+      <span class="hl">payload: Protobuf.encode(confirmed)</span>
+    <span class="hl">}</span>)
+  <span class="kw">end</span>)
+  <span class="op">|&gt;</span> Repo.transaction()
+<span class="kw">end</span></pre>
+  <div class="callout" style="margin-top: 16px;">
+    <p>Debezium reads PostgreSQL WAL, publishes to Kafka. No polling. Zero coupling.</p>
+    <p>Your app writes to Postgres. Debezium does the rest — near real-time CDC.</p>
+  </div>
+  <div class="slide-footer">Distilling the Stream</div>
+  <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
+  <!-- SPEAKER: "We talked about the consumer side. Now the producer side. The outbox pattern: you never call Kafka from business logic. Write an OutboxEvent in the same transaction as your domain change. Debezium connects to the WAL, picks it up, publishes to Kafka. No polling, no cron jobs. pg_partman handles weekly partitions with 2-week retention." -->
+</div>
+
+<!-- ====================================================
+     SLIDE 16: Pillar 2 Takeaway
+     ==================================================== -->
+<div class="slide takeaway" id="slide-18">
+  <h2>Pillar 2 Takeaway</h2>
+  <p class="takeaway-text">Idempotency is not an afterthought.<br>Design for it from day one.</p>
+  <p style="margin-top: 28px; font-size: 22px; color: #666;">
+    Kafka guarantees at-least-once delivery.<br>
+    Your application must guarantee idempotent processing.
+  </p>
+  <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
+</div>
+
+<!-- ====================================================
+     SLIDE 17: Pillar 3 Divider
+     ==================================================== -->
+<div class="slide divider" id="slide-19">
+  <div class="pillar-number">3</div>
+  <h2>Why Pure<br>Elixir</h2>
+  <p class="divider-sub">A real decision. With real reasons.</p>
+  <p class="divider-byline">— Anton Borisov</p>
+  <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
+  <!-- SPEAKER: Bridge from P2: "We had the patterns. But we needed the right foundation to run them on." Both speakers share this section. -->
+</div>
+
+<!-- ====================================================
+     SLIDE: P3 Kafka Clients on the BEAM — the three approaches
+     ==================================================== -->
+<div class="slide" id="slide-p3-beam" style="padding: 40px 60px 68px 60px;">
+  <h2>Kafka Clients on the <span class="accent">BEAM</span></h2>
+  <p style="font-size: 20px; color: var(--text-secondary); margin-top: -4px; margin-bottom: 20px;">
+    Three architectural approaches. Each with real tradeoffs.
+  </p>
+
+  <div style="display: flex; gap: 22px; flex: 1; align-items: stretch;">
+
+    <!-- erlkaf — NIF approach -->
+    <div style="flex: 1; display: flex; flex-direction: column; background: rgba(240,96,96,0.04); border: 1px solid rgba(240,96,96,0.2); border-top: 4px solid var(--accent-red); border-radius: 8px; padding: 18px 20px;">
+      <div style="font-family: var(--font-display); font-size: 28px; font-weight: 800; color: var(--accent-red); line-height: 1;">erlkaf</div>
+      <div style="font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary); margin-top: 6px; letter-spacing: 0.02em; line-height: 1.4;">
+        NIF wrapper around<br><strong style="color: var(--text-body);">librdkafka</strong> (C library)
+      </div>
+
+      <div style="height: 1px; background: rgba(240,96,96,0.15); margin: 14px 0;"></div>
+
+      <div style="font-family: var(--font-mono); font-size: 14px; line-height: 1.55; display: flex; flex-direction: column; gap: 4px;">
+        <div><span style="color: var(--accent-green); font-weight: 700; margin-right: 8px;">+</span><span style="color: var(--text-body);">Battle-tested C code</span></div>
+        <div><span style="color: var(--accent-green); font-weight: 700; margin-right: 8px;">+</span><span style="color: var(--text-body);">Full feature set</span></div>
+      </div>
+
+      <div style="margin-top: 10px; font-family: var(--font-mono); font-size: 14px; line-height: 1.55; display: flex; flex-direction: column; gap: 4px;">
+        <div><span style="color: var(--accent-red); font-weight: 700; margin-right: 8px;">&minus;</span><span style="color: var(--text-body);">NIF crash = VM crash</span></div>
+        <div><span style="color: var(--accent-red); font-weight: 700; margin-right: 8px;">&minus;</span><span style="color: var(--text-body);">Hard to debug</span></div>
+        <div><span style="color: var(--accent-red); font-weight: 700; margin-right: 8px;">&minus;</span><span style="color: var(--text-body);">C dependency</span></div>
+      </div>
+    </div>
+
+    <!-- brod — native Erlang -->
+    <div style="flex: 1; display: flex; flex-direction: column; background: rgba(124,92,252,0.04); border: 1px solid rgba(124,92,252,0.2); border-top: 4px solid var(--accent); border-radius: 8px; padding: 18px 20px;">
+      <div style="font-family: var(--font-display); font-size: 28px; font-weight: 800; color: var(--accent); line-height: 1;">brod</div>
+      <div style="font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary); margin-top: 6px; letter-spacing: 0.02em; line-height: 1.4;">
+        Native Erlang<br><strong style="color: var(--text-body);">kafka_protocol</strong>
+      </div>
+
+      <div style="height: 1px; background: rgba(124,92,252,0.15); margin: 14px 0;"></div>
+
+      <div style="font-family: var(--font-mono); font-size: 14px; line-height: 1.55; display: flex; flex-direction: column; gap: 4px;">
+        <div><span style="color: var(--accent-green); font-weight: 700; margin-right: 8px;">+</span><span style="color: var(--text-body);">Pure BEAM</span></div>
+        <div><span style="color: var(--accent-green); font-weight: 700; margin-right: 8px;">+</span><span style="color: var(--text-body);">Mature, widely used</span></div>
+      </div>
+
+      <div style="margin-top: 10px; font-family: var(--font-mono); font-size: 14px; line-height: 1.55; display: flex; flex-direction: column; gap: 4px;">
+        <div><span style="color: var(--accent-red); font-weight: 700; margin-right: 8px;">&minus;</span><span style="color: var(--text-body);">Erlang records</span></div>
+        <div><span style="color: var(--accent-red); font-weight: 700; margin-right: 8px;">&minus;</span><span style="color: var(--text-body);">Manual protocol updates</span></div>
+        <div><span style="color: var(--accent-red); font-weight: 700; margin-right: 8px;">&minus;</span><span style="color: var(--text-body);">Complex API</span></div>
+      </div>
+    </div>
+
+    <!-- kafka_ex — pure Elixir + codegen -->
+    <div style="flex: 1; display: flex; flex-direction: column; background: rgba(92,232,180,0.04); border: 1px solid rgba(92,232,180,0.25); border-top: 4px solid var(--accent-green); border-radius: 8px; padding: 18px 20px; box-shadow: 0 0 18px rgba(92,232,180,0.08);">
+      <div style="font-family: var(--font-display); font-size: 28px; font-weight: 800; color: var(--accent-green); line-height: 1;">kafka_ex</div>
+      <div style="font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary); margin-top: 6px; letter-spacing: 0.02em; line-height: 1.4;">
+        Pure Elixir +<br><strong style="color: var(--text-body);">compile-time codegen</strong>
+      </div>
+
+      <div style="height: 1px; background: rgba(92,232,180,0.2); margin: 14px 0;"></div>
+
+      <div style="font-family: var(--font-mono); font-size: 14px; line-height: 1.55; display: flex; flex-direction: column; gap: 4px;">
+        <div><span style="color: var(--accent-green); font-weight: 700; margin-right: 8px;">+</span><span style="color: var(--text-body);">Elixir-native structs</span></div>
+        <div><span style="color: var(--accent-green); font-weight: 700; margin-right: 8px;">+</span><span style="color: var(--text-body);">Auto-generated protocol</span></div>
+        <div><span style="color: var(--accent-green); font-weight: 700; margin-right: 8px;">+</span><span style="color: var(--text-body);">Easy to extend</span></div>
+      </div>
+
+      <div style="margin-top: 10px; font-family: var(--font-mono); font-size: 14px; line-height: 1.55; display: flex; flex-direction: column; gap: 4px;">
+        <div><span style="color: var(--accent-red); font-weight: 700; margin-right: 8px;">&minus;</span><span style="color: var(--text-body);">Smaller community</span></div>
+        <div><span style="color: var(--accent-red); font-weight: 700; margin-right: 8px;">&minus;</span><span style="color: var(--text-body);">Newer</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bridge line -->
+  <div style="margin-top: 18px; text-align: center; font-family: var(--font-mono); font-size: 15px; color: var(--text-secondary);">
+    The fit depends on your constraints &mdash; <span style="color: var(--accent-warm);">so what were ours?</span>
+  </div>
+
+  <div class="slide-footer">Distilling the Stream</div>
+  <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
+  <!-- SPEAKER: Anton. "Before we talk about our choice, here's the space. Three approaches. erlkaf wraps librdkafka via a NIF — rock-solid C, but a NIF crash takes the whole VM with it. brod is native Erlang, mature, widely deployed — but Erlang records and a complex API. kafka_ex is pure Elixir with a compile-time code generator — Elixir-native structs, auto-generated protocol. Each fits different constraints. Ours pushed us one direction." -->
+</div>
+
+<!-- ====================================================
+     SLIDE 18: Landscape — our shortlist
+     ==================================================== -->
+<div class="slide" id="slide-20">
+  <h2>Our Shortlist <span class="accent">(a few years ago)</span></h2>
+  <p style="font-size: 22px; color: var(--text-secondary); margin-bottom: 20px;">Same three approaches, scored against the constraints that mattered to <em>us</em>: AWS MSK, small Elixir team, tight review cadence.</p>
+  <div class="comparison-matrix">
+    <div class="cm-row cm-header">
+      <div class="cm-cell cm-lib"></div>
+      <div class="cm-cell">Elixir Native<br><span style="font-size:11px;opacity:0.6;text-transform:none;letter-spacing:0;">No Erlang / C</span></div>
+      <div class="cm-cell">MSK Recovery<br><span style="font-size:11px;opacity:0.6;text-transform:none;letter-spacing:0;">Survives AWS restarts</span></div>
+      <div class="cm-cell">Team Owns It<br><span style="font-size:11px;opacity:0.6;text-transform:none;letter-spacing:0;">Readable &amp; forkable</span></div>
+    </div>
+    <div class="cm-row">
+      <div class="cm-cell cm-lib">Broadway</div>
+      <div class="cm-cell"><span class="cm-partial">~</span></div>
+      <div class="cm-cell"><span class="cm-yes">&#10003;</span></div>
+      <div class="cm-cell"><span class="cm-partial">~</span></div>
+    </div>
+    <div class="cm-row">
+      <div class="cm-cell cm-lib">Brod</div>
+      <div class="cm-cell"><span class="cm-no">&#10005;</span></div>
+      <div class="cm-cell"><span class="cm-yes">&#10003;</span></div>
+      <div class="cm-cell"><span class="cm-no">&#10005;</span></div>
+    </div>
+    <div class="cm-row">
+      <div class="cm-cell cm-lib">Kaffe</div>
+      <div class="cm-cell"><span class="cm-partial">~</span></div>
+      <div class="cm-cell"><span class="cm-no">&#10005;</span></div>
+      <div class="cm-cell"><span class="cm-partial">~</span></div>
+    </div>
+    <div class="cm-row cm-highlight">
+      <div class="cm-cell cm-lib">KafkaEx</div>
+      <div class="cm-cell"><span class="cm-yes">&#10003;</span></div>
+      <div class="cm-cell"><span class="cm-yes">&#10003;</span></div>
+      <div class="cm-cell"><span class="cm-yes">&#10003;</span></div>
+    </div>
+  </div>
+  <div class="slide-footer">Distilling the Stream</div>
+  <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
+  <!-- SPEAKER: This was not an ideological choice. Brod is solid — but it's Erlang, and pre-LLM, reading Erlang source code required a specialist. That mattered for our team. Kaffe struggled with MSK broker restarts. KafkaEx: pure Elixir, the team could read and own every line. -->
+</div>
+
+<!-- ====================================================
+     SLIDE 19: MSK Restarts — The Real Problem (NEW)
+     ==================================================== -->
+<div class="slide incident" id="slide-msk-incident">
+  <div class="incident-label">The Real Problem</div>
+  <h2>MSK Restarts: What Actually Happens</h2>
+  <ul style="margin-top: 24px;">
+    <li>AWS MSK broker restarts during maintenance windows — routine, expected</li>
+    <li><strong style="color: var(--accent-red);">Kaffe consumers</strong> left in wrong state after restart — no visibility into what happened</li>
+    <li>Consumer lag growing silently. No alerts — process was technically "alive" but not consuming</li>
+    <li><strong style="color: var(--accent-green);">KafkaEx + OTP supervision:</strong> consumer process crashes cleanly, supervisor restarts it, reconnects automatically, telemetry reports the restart</li>
+  </ul>
+  <div class="callout" style="margin-top: 24px;">
+    <p>The difference: Kaffe tried to handle the error. KafkaEx let it crash.</p>
+    <p>One approach left consumers in limbo. The other recovered in seconds.</p>
+  </div>
+  <div class="slide-footer">Distilling the Stream</div>
+  <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
+  <!-- SPEAKER: Anton. "This actually happened. MSK maintenance window. Kaffe consumers — technically alive, but not consuming. Lag growing, no alerts. With KafkaEx, the process crashes. Supervisor restarts it. Telemetry fires. We know exactly what happened, and the consumer is back in seconds." -->
+</div>
+
+<!-- ====================================================
+     SLIDE 20: Let it crash — with caption
+     ==================================================== -->
+<div class="slide code-slide" id="slide-21">
+  <h2>MSK Restarts: <span class="accent">Let It Crash</span></h2>
+  <pre><span class="cm"># When the broker goes away...</span>
+<span class="cm"># KafkaEx consumer crashes. Supervisor restarts it.</span>
+<span class="cm"># It reconnects. No special recovery code.</span>
+
+<span class="kw">defmodule</span> <span class="fn">MyApp.Application</span> <span class="kw">do</span>
+  <span class="kw">use</span> Application
+
+  <span class="kw">def</span> <span class="fn">start</span>(_type, _args) <span class="kw">do</span>
+    children <span class="op">=</span> [
+      <span class="hl">MyApp.ConsumerSupervisor</span>  <span class="cm"># &larr; restarts on crash</span>
+    ]
+    Supervisor.start_link(children,
+      strategy: <span class="nm">:one_for_one</span>)
+  <span class="kw">end</span>
+<span class="kw">end</span></pre>
+  <p class="code-caption">
+    This is not clever engineering. This is OTP doing what OTP does.
+  </p>
+  <div class="callout" style="margin-top: 12px;">
+    <p>Kaffe needed special recovery handlers for MSK restarts. We wrote zero recovery code.</p>
+  </div>
+  <div class="slide-footer">Distilling the Stream</div>
+  <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
+  <!-- SPEAKER: The supervisor IS the recovery strategy. Kaffe needed special handling for MSK restarts. We didn't write any recovery code — because we didn't have to. -->
+</div>
+
+<!-- ====================================================
+     SLIDE 20: Pillar 3 Takeaway
+     ==================================================== -->
+<div class="slide takeaway" id="slide-22">
+  <h2>Pillar 3 Takeaway</h2>
+  <p class="takeaway-text">We chose pure Elixir because<br>"let it crash" solved a real problem.</p>
+  <p style="margin-top: 28px; font-size: 22px; color: #666;">
+    OTP supervision is not a trick. It's a production strategy.<br>
+    And the team could read and own every line.
+  </p>
+  <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
+</div>
+
+<!-- ====================================================
+     SLIDE 21: Pillar 4 Divider
+     ==================================================== -->
+<div class="slide divider" id="slide-23">
+  <div class="pillar-number">4</div>
+  <h2>Infrastructure<br>Optimization</h2>
+  <p class="divider-sub">Same protocol. Zero code changes.</p>
+  <p class="divider-byline">— Anton Borisov</p>
+  <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
+  <!-- SPEAKER: "We've talked about application-level patterns. Now let's zoom out. Kafka is evolving fast at the infrastructure layer — and because we built on the standard protocol, we get to ride that wave for free." -->
+</div>
+
+<!-- ====================================================
+     SLIDE: P4 The Problem — 80+ × 9 × 2
+     ==================================================== -->
+<div class="slide" id="slide-p4-problem" style="padding: 60px 80px; justify-content: space-between;">
+  <h2>The <span class="accent-warm">Problem</span></h2>
+
+  <div style="display: flex; gap: 32px; justify-content: space-between; align-items: flex-end; margin-top: auto;">
+    <div style="flex: 1; text-align: center; position: relative;">
+      <div style="font-family: var(--font-display); font-size: 180px; font-weight: 800; color: var(--accent-warm); line-height: 0.9; letter-spacing: -0.04em;">
+        80<span style="font-size: 120px; vertical-align: 20px;">+</span>
+      </div>
+      <div style="font-family: var(--font-display); font-size: 22px; font-weight: 600; color: var(--text-primary); letter-spacing: 0.04em; margin-top: 12px;">API types</div>
+      <div style="font-family: var(--font-mono); font-size: 13px; color: var(--text-dim); margin-top: 4px;">Produce, Fetch, Metadata, JoinGroup…</div>
+    </div>
+
+    <div style="font-family: var(--font-display); font-size: 42px; color: var(--text-dim); padding-bottom: 80px;">×</div>
+
+    <div style="flex: 1; text-align: center;">
+      <div style="font-family: var(--font-display); font-size: 180px; font-weight: 800; color: var(--accent); line-height: 0.9; letter-spacing: -0.04em;">9</div>
+      <div style="font-family: var(--font-display); font-size: 22px; font-weight: 600; color: var(--text-primary); letter-spacing: 0.04em; margin-top: 12px;">Produce versions</div>
+      <div style="font-family: var(--font-mono); font-size: 13px; color: var(--text-dim); margin-top: 4px;">each independently versioned</div>
+    </div>
+
+    <div style="font-family: var(--font-display); font-size: 42px; color: var(--text-dim); padding-bottom: 80px;">×</div>
+
+    <div style="flex: 1; text-align: center;">
+      <div style="font-family: var(--font-display); font-size: 180px; font-weight: 800; color: var(--accent-red); line-height: 0.9; letter-spacing: -0.04em;">2</div>
+      <div style="font-family: var(--font-display); font-size: 22px; font-weight: 600; color: var(--text-primary); letter-spacing: 0.04em; margin-top: 12px;">message formats</div>
+      <div style="font-family: var(--font-mono); font-size: 13px; color: var(--text-dim); margin-top: 4px;">MessageSet + RecordBatch</div>
+    </div>
+  </div>
+
+  <p style="margin-top: 48px; font-family: var(--font-display); font-size: 26px; color: var(--text-body); line-height: 1.4; max-width: 1100px;">
+    Each API independently versioned.<br>
+    Encoding rules shift across releases.<br>
+    <span style="color: var(--accent-warm); font-weight: 600;">Clients must handle all of this correctly.</span>
+  </p>
+
+  <div class="slide-footer">Distilling the Stream</div>
+  <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
+  <!-- SPEAKER: Anton. "This is what we're actually up against. Eighty-plus APIs. Produce alone has nine versions. Two entirely different message formats — MessageSet and RecordBatch. Every combination needs its own struct, its own serializer, its own decoder. Hand-writing that is a full-time job." -->
+</div>
+
+<!-- ====================================================
+     SLIDE: P4 RecordBatch Format — what one format looks like on the wire
+     ==================================================== -->
+<div class="slide code-slide" id="slide-p4-recordbatch" style="padding: 28px 56px 68px 56px;">
+  <h2>RecordBatch: <span class="accent">The Modern Format</span></h2>
+
+  <div style="display: flex; gap: 24px; flex: 1; align-items: stretch;">
+
+    <div style="flex: 1.15; display: flex; flex-direction: column;">
+      <div style="font-family: var(--font-display); font-size: 12px; color: var(--text-secondary); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px;">Wire layout</div>
+
+      <div style="background: var(--bg-elevated); border: 1px solid rgba(124,92,252,0.1); border-radius: 8px; padding: 6px 0; font-family: var(--font-mono); font-size: 14px; line-height: 1.4;">
+        <div style="display: flex; justify-content: space-between; padding: 4px 16px; border-left: 3px solid var(--accent);"><span style="color: var(--text-primary);">baseOffset</span><span style="color: var(--accent);">int64</span></div>
+        <div style="display: flex; justify-content: space-between; padding: 4px 16px; border-left: 3px solid var(--accent);"><span style="color: var(--text-primary);">batchLength</span><span style="color: var(--accent);">int32</span></div>
+        <div style="display: flex; justify-content: space-between; padding: 4px 16px; border-left: 3px solid transparent;"><span style="color: var(--text-dim);">partitionLeaderEpoch</span><span style="color: var(--text-dim);">int32</span></div>
+        <div style="display: flex; justify-content: space-between; padding: 4px 16px; border-left: 3px solid var(--accent-warm); background: rgba(232,168,56,0.06);">
+          <span style="color: var(--accent-warm);">magic = 2</span><span style="color: var(--accent-warm);">int8</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; padding: 4px 16px; border-left: 3px solid var(--accent-red); background: rgba(240,96,96,0.06);">
+          <span style="color: var(--accent-red);">crc</span><span style="color: var(--accent-red);">int32</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; padding: 4px 16px; border-left: 3px solid var(--accent-green); background: rgba(92,232,180,0.06);">
+          <span style="color: var(--accent-green);">attributes</span><span style="color: var(--accent-green);">int16</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; padding: 4px 16px; border-left: 3px solid transparent;"><span style="color: var(--text-dim);">lastOffsetDelta</span><span style="color: var(--text-dim);">int32</span></div>
+        <div style="display: flex; justify-content: space-between; padding: 4px 16px; border-left: 3px solid transparent;"><span style="color: var(--text-dim);">firstTimestamp</span><span style="color: var(--text-dim);">int64</span></div>
+        <div style="display: flex; justify-content: space-between; padding: 4px 16px; border-left: 3px solid transparent;"><span style="color: var(--text-dim);">maxTimestamp</span><span style="color: var(--text-dim);">int64</span></div>
+        <div style="display: flex; justify-content: space-between; padding: 4px 16px; border-left: 3px solid transparent;"><span style="color: var(--text-dim);">producerId</span><span style="color: var(--text-dim);">int64</span></div>
+        <div style="display: flex; justify-content: space-between; padding: 4px 16px; border-left: 3px solid transparent;"><span style="color: var(--text-dim);">producerEpoch</span><span style="color: var(--text-dim);">int16</span></div>
+        <div style="display: flex; justify-content: space-between; padding: 4px 16px; border-left: 3px solid transparent;"><span style="color: var(--text-dim);">baseSequence</span><span style="color: var(--text-dim);">int32</span></div>
+        <div style="display: flex; justify-content: space-between; padding: 4px 16px; border-left: 3px solid var(--accent-green); background: rgba(92,232,180,0.06);">
+          <span style="color: var(--accent-green);">records</span><span style="color: var(--accent-green);">[Record]</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="flex: 1.35; display: flex; flex-direction: column; gap: 12px;">
+
+      <div style="background: rgba(92,232,180,0.06); border: 1px solid rgba(92,232,180,0.25); border-left: 4px solid var(--accent-green); border-radius: 8px; padding: 12px 16px;">
+        <div style="font-family: var(--font-display); font-size: 12px; font-weight: 700; color: var(--accent-green); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 8px;">attributes (int16) bits</div>
+        <div style="font-family: var(--font-mono); font-size: 13px; color: var(--text-body); line-height: 1.5;">
+          <div><span style="color: var(--accent-green);">0&ndash;2</span>: compression <span style="color: var(--text-dim);">(none / gzip / snappy / lz4 / zstd)</span></div>
+          <div><span style="color: var(--accent-green);">3</span>: timestamp type</div>
+          <div><span style="color: var(--accent-green);">4</span>: isTransactional</div>
+          <div><span style="color: var(--accent-green);">5</span>: isControlBatch</div>
+          <div style="color: var(--text-dim);"><span style="color: var(--text-dim);">6&ndash;15</span>: unused</div>
+        </div>
+      </div>
+
+      <div style="background: rgba(240,96,96,0.06); border: 1px solid rgba(240,96,96,0.3); border-left: 4px solid var(--accent-red); border-radius: 8px; padding: 12px 16px;">
+        <div style="font-family: var(--font-display); font-size: 12px; font-weight: 700; color: var(--accent-red); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 6px;">CRC32c covers</div>
+        <div style="font-family: var(--font-mono); font-size: 13px; color: var(--text-body); line-height: 1.5;">
+          <span style="color: var(--accent-green);">attributes</span> <span style="color: var(--accent-red);">&rarr;</span> end of <span style="color: var(--accent-green);">records</span>
+          <div style="color: var(--text-dim); font-size: 12px; margin-top: 2px;">everything after the CRC field itself</div>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; flex: 1;">
+        <div style="font-family: var(--font-display); font-size: 12px; color: var(--text-secondary); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 6px;">In Kayrock</div>
+<pre style="font-size: 13px; padding: 14px 18px; line-height: 1.5; margin: 0; flex: 1;">header <span class="op">=</span> <span class="hl">&lt;&lt;attributes::<span class="nm">16</span>-signed,
+          last_offset_delta::<span class="nm">32</span>-signed,
+          first_timestamp::<span class="nm">64</span>-signed, ...&gt;&gt;</span>
+
+for_crc <span class="op">=</span> [header, records]
+crc     <span class="op">=</span> <span class="fn">:crc32cer.nif</span>(for_crc)</pre>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top: 10px; font-family: var(--font-mono); font-size: 14px; color: var(--text-secondary); text-align: center;">
+    13 fields. Bit-packed flags. CRC that skips itself. &mdash; <span style="color: var(--accent-warm);">and this is only the batch header.</span>
+  </div>
+
+  <div class="slide-footer">Distilling the Stream</div>
+  <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
+  <!-- SPEAKER: Anton. "Here's what one message format actually looks like. Thirteen fields with exact wire positions. The CRC covers everything after itself — so you serialize, then back-fill the CRC. Attributes is a bit-packed int16 — compression type in bits 0-2, transactional flag in bit 4. And the records field? That's a variable-length array of another nested structure. Elixir's bit syntax makes this tractable — the binary layout in your source reads almost exactly like the spec." -->
+</div>
+
+<!-- ====================================================
+     SLIDE: P4 The Idea — Generate Everything
+     ==================================================== -->
+<div class="slide" id="slide-p4-idea" style="padding: 40px 60px 68px 60px;">
+  <h2>The Idea: <span class="accent">Generate Everything</span></h2>
+
+  <!-- Three-stage pipeline -->
+  <div style="display: flex; align-items: center; gap: 16px; margin-top: 20px;">
+    <!-- Input -->
+    <div style="flex: 1; background: rgba(232,168,56,0.1); border: 2px solid rgba(232,168,56,0.4); border-radius: 10px; padding: 18px 20px; text-align: center;">
+      <div style="font-family: var(--font-mono); font-size: 11px; color: var(--accent-warm); letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 6px;">Input</div>
+      <div style="font-family: var(--font-display); font-size: 20px; font-weight: 700; color: var(--text-primary); line-height: 1.3;">Kafka's JSON<br>Schema Defs</div>
+      <div style="font-family: var(--font-mono); font-size: 12px; color: var(--text-dim); margin-top: 6px;">kpro_schema (Erlang)</div>
+    </div>
+
+    <div style="color: var(--text-dim); font-size: 26px;">&rarr;</div>
+
+    <!-- Transform -->
+    <div style="flex: 1.1; background: rgba(124,92,252,0.1); border: 2px solid rgba(124,92,252,0.5); border-radius: 10px; padding: 18px 20px; text-align: center; box-shadow: 0 0 20px rgba(124,92,252,0.1);">
+      <div style="font-family: var(--font-mono); font-size: 11px; color: var(--accent); letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 6px;">Transform</div>
+      <div style="font-family: var(--font-display); font-size: 20px; font-weight: 700; color: var(--text-primary); line-height: 1.3;">Elixir Macros</div>
+      <div style="font-family: var(--font-mono); font-size: 12px; color: var(--accent); margin-top: 6px;">compile-time</div>
+    </div>
+
+    <div style="color: var(--text-dim); font-size: 26px;">&rarr;</div>
+
+    <!-- Output -->
+    <div style="flex: 1; background: rgba(92,232,180,0.1); border: 2px solid rgba(92,232,180,0.4); border-radius: 10px; padding: 18px 20px; text-align: center;">
+      <div style="font-family: var(--font-mono); font-size: 11px; color: var(--accent-green); letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 6px;">Output</div>
+      <div style="font-family: var(--font-display); font-size: 20px; font-weight: 700; color: var(--text-primary); line-height: 1.3;">Generated<br>Modules</div>
+      <div style="font-family: var(--font-mono); font-size: 12px; color: var(--text-dim); margin-top: 6px;">Elixir defstructs + code</div>
+    </div>
+  </div>
+
+  <!-- What's generated -->
+  <div style="margin-top: 28px;">
+    <div style="font-family: var(--font-display); font-size: 15px; font-weight: 700; color: var(--text-secondary); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 14px;">For each API + version, the generator emits</div>
+    <ul style="margin: 0;">
+      <li><code style="font-family: var(--font-mono); color: var(--accent);">defstruct</code> &mdash; typed request/response structs</li>
+      <li><code style="font-family: var(--font-mono); color: var(--accent);">serialize/1</code> &mdash; struct &rarr; iodata (binary)</li>
+      <li><code style="font-family: var(--font-mono); color: var(--accent);">deserialize/1</code> &mdash; binary &rarr; struct (recursive)</li>
+      <li><code style="font-family: var(--font-mono); color: var(--accent);">api_key/0</code> &mdash; Kafka API key constant</li>
+      <li><code style="font-family: var(--font-mono); color: var(--accent);">api_vsn/0</code> &mdash; version number</li>
+    </ul>
+  </div>
+
+  <!-- Stat bar -->
+  <div style="margin-top: 24px; display: flex; gap: 20px; padding: 14px 22px; background: var(--bg-elevated); border-left: 4px solid var(--accent-green); border-radius: 6px; align-items: center;">
+    <div style="font-family: var(--font-display); font-size: 26px; font-weight: 800; color: var(--accent-green); letter-spacing: -0.02em;">45</div>
+    <div style="font-family: var(--font-mono); font-size: 13px; color: var(--text-secondary);">API modules</div>
+    <div style="color: var(--text-dim);">&bull;</div>
+    <div style="font-family: var(--font-display); font-size: 26px; font-weight: 800; color: var(--accent-green); letter-spacing: -0.02em;">~500</div>
+    <div style="font-family: var(--font-mono); font-size: 13px; color: var(--text-secondary);">version-specific structs</div>
+    <div style="color: var(--text-dim);">&bull;</div>
+    <div style="font-family: var(--font-display); font-size: 18px; font-weight: 700; color: var(--accent-warm);">Zero hand-written serialization code.</div>
+  </div>
+
+  <div class="slide-footer">Distilling the Stream</div>
+  <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
+  <!-- SPEAKER: Anton. "The idea is simple. Kafka publishes its protocol as structured schema definitions. We read them at compile time, and emit every struct, every serializer, every deserializer from a single generator. Forty-five API modules, around five hundred version-specific structs, and zero hand-written serialization code." -->
+</div>
+
+<!-- ====================================================
+     SLIDE: P4 The Generator — Kayrock.Generate
+     ==================================================== -->
+<div class="slide code-slide" id="slide-p4-generator" style="padding: 40px 60px;">
+  <h2>The Generator: <span class="accent">Kayrock.Generate</span></h2>
+
+  <div class="code-columns" style="align-items: stretch;">
+    <div class="code-col">
+      <h3>build_all/2 &mdash; the whole generator</h3>
+<pre><span class="kw">def</span> <span class="fn">build_all</span>(api, schema_module) <span class="kw">do</span>
+  modname <span class="op">=</span> <span class="fn">Module.concat</span>([<span class="fn">Kayrock</span>,
+    <span class="fn">Macro.camelize</span>(<span class="st">"#{api}"</span>)])
+
+  contents <span class="op">=</span> <span class="fn">build_modules</span>(api, schema_module, modname)
+
+  <span class="hl"><span class="kw">quote</span> <span class="kw">do</span>
+    <span class="kw">defmodule</span> <span class="fn">unquote</span>(modname) <span class="kw">do</span>
+      _ <span class="op">=</span> <span class="st">"THIS CODE IS GENERATED BY KAYROCK"</span>
+      <span class="fn">unquote_splicing</span>(contents)
+    <span class="kw">end</span>
+  <span class="kw">end</span></span>
+<span class="kw">end</span></pre>
+    </div>
+
+    <div class="code-col">
+      <h3>What build_modules(api) emits</h3>
+      <div style="background: var(--bg-elevated); border: 1px solid rgba(124,92,252,0.08); border-radius: var(--radius); padding: 20px 24px; font-family: var(--font-mono); font-size: 17px; line-height: 1.55; color: var(--text-body);">
+
+        <div style="font-family: var(--font-display); font-size: 13px; font-weight: 700; color: var(--accent-warm); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 10px;">For each version V0..V8</div>
+
+        <div style="border-left: 2px solid rgba(232,168,56,0.3); padding-left: 14px;">
+          <div style="margin-bottom: 10px;">
+            <span style="color: var(--accent);">&rarr; make_request_module</span>(api, vsn)
+            <div style="color: var(--text-dim); padding-left: 22px; font-size: 15px;">defstruct + <span style="color: var(--accent-green);">serialize/1</span></div>
+          </div>
+          <div>
+            <span style="color: var(--accent);">&rarr; make_response_module</span>(api, vsn)
+            <div style="color: var(--text-dim); padding-left: 22px; font-size: 15px;">defstruct + <span style="color: var(--accent-green);">deserialize/1</span></div>
+          </div>
+        </div>
+
+        <div style="height: 1px; background: rgba(124,92,252,0.15); margin: 18px 0;"></div>
+
+        <div style="font-family: var(--font-display); font-size: 13px; font-weight: 700; color: var(--accent-warm); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 10px;">Plus metadata</div>
+
+        <div style="border-left: 2px solid rgba(232,168,56,0.3); padding-left: 14px;">
+          <div><span style="color: var(--accent);">&rarr; get_request_struct</span>(vsn)</div>
+          <div><span style="color: var(--accent);">&rarr; min_vsn</span> / <span style="color: var(--accent);">max_vsn</span></div>
+          <div><span style="color: var(--accent);">&rarr; version_range</span>(api)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display: flex; gap: 24px; margin-top: 20px; align-items: stretch;">
+    <div style="flex: 1.4; background: rgba(124,92,252,0.08); border: 1px solid rgba(124,92,252,0.3); border-left: 4px solid var(--accent); border-radius: 8px; padding: 14px 20px;">
+      <div style="font-family: var(--font-mono); font-size: 14px; color: var(--accent); letter-spacing: 0.05em; margin-bottom: 4px;">quote / unquote</div>
+      <div style="font-family: var(--font-display); font-size: 19px; font-weight: 600; color: var(--text-primary); line-height: 1.3;">
+        Elixir's homoiconicity &mdash; the schema <span style="color: var(--accent-warm);">is</span> the program.
+      </div>
+    </div>
+
+    <div style="flex: 1; background: var(--bg-elevated); border-radius: 8px; padding: 14px 20px; display: flex; align-items: center; gap: 16px;">
+      <div style="font-family: var(--font-display); font-size: 30px; font-weight: 800; color: var(--accent-green); letter-spacing: -0.02em;">~900</div>
+      <div style="font-family: var(--font-mono); font-size: 13px; color: var(--text-secondary); line-height: 1.4;">
+        lines of generator<br>
+        <span style="color: var(--accent-green);">&rarr;</span> 45 modules, hundreds of structs
+      </div>
+    </div>
+  </div>
+
+  <div class="slide-footer">Distilling the Stream</div>
+  <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
+  <!-- SPEAKER: Anton. "Nine hundred lines of Elixir macros — quote, unquote, unquote_splicing — read the schema and write the entire client library at compile time. Schema updates ship; we regenerate; everything else stays the same." -->
+</div>
+
+<!-- ====================================================
+     SLIDE: P4 Schema to Struct — the transformation up close
+     ==================================================== -->
+<div class="slide code-slide" id="slide-p4-schema-to-struct" style="padding: 32px 56px 68px 56px;">
+  <h2>Schema <span class="accent">&rarr;</span> Struct</h2>
+
+  <!-- Top row: input → output -->
+  <div class="code-columns" style="align-items: stretch;">
+    <div class="code-col">
+      <h3>Input schema (kpro_schema)</h3>
+<pre style="font-size: 15px; line-height: 1.5; padding: 16px 20px; margin: 0;">[acks: <span class="nm">:int16</span>,
+ timeout: <span class="nm">:int32</span>,
+ topic_data: {<span class="nm">:array</span>, ...}]</pre>
+    </div>
+
+    <div class="code-col">
+      <h3>Generated output</h3>
+<pre style="font-size: 14px; line-height: 1.5; padding: 16px 20px; margin: 0;"><span class="kw">defmodule</span> <span class="fn">Kayrock.Produce.V0.Request</span> <span class="kw">do</span>
+  <span class="hl"><span class="kw">defstruct</span> acks: <span class="kw">nil</span>,
+            timeout: <span class="kw">nil</span>,
+            topic_data: [],
+            correlation_id: <span class="kw">nil</span>,
+            client_id: <span class="kw">nil</span></span>
+
+  <span class="cm">@type t :: %__MODULE__{...}</span>
+<span class="kw">end</span></pre>
+    </div>
+  </div>
+
+  <!-- Bottom: the macro -->
+  <div style="margin-top: 14px;">
+    <div style="font-family: var(--font-display); font-size: 13px; font-weight: 700; color: var(--accent-warm); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 6px;">The macro that does it</div>
+<pre style="font-size: 14px; line-height: 1.5; padding: 16px 20px; margin: 0;">fields <span class="op">=</span> <span class="fn">Enum.reduce</span>(schema, [], <span class="kw">fn</span> {k, v}, acc <span class="op">-&gt;</span>
+  acc <span class="op">++</span> [{k, <span class="fn">default_val</span>(v)}]
+<span class="kw">end</span>) <span class="op">++</span> [correlation_id: <span class="kw">nil</span>, client_id: <span class="kw">nil</span>]
+
+<span class="hl"><span class="kw">quote</span> <span class="kw">do</span>
+  <span class="kw">defstruct</span> <span class="fn">unquote</span>(fields)
+<span class="kw">end</span></span></pre>
+  </div>
+
+  <!-- Caption -->
+  <p class="code-caption" style="margin-top: 12px; text-align: center;">
+    Plain structs. Pattern matching. Type specs. <span style="color: var(--accent-warm);">No magic at runtime</span> &mdash; all generated at compile time.
+  </p>
+
+  <div class="slide-footer">Distilling the Stream</div>
+  <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
+  <!-- SPEAKER: Anton. "Here's the transformation at its simplest. Left: the schema — a keyword list of field names and wire types. Right: what Kayrock generates — a plain Elixir module with a defstruct, a typespec, and correlation_id plus client_id added for the request header. The macro itself: Enum.reduce over the schema, build a field list, splice it into a defstruct inside a quote block. No metaprogramming gymnastics — just code that writes code." -->
+</div>
+
+<!-- ====================================================
+     SLIDE 22: The Payoff — Jumping Two Major Versions (NEW)
+     ==================================================== -->
+<div class="slide" id="slide-version-jump" style="padding: 40px 60px;">
+  <h2>The Payoff: <span class="accent">Jumping Two Major Versions</span></h2>
+
+  <div style="display: flex; gap: 36px; margin-top: 16px; flex: 1;">
+    <!-- Left: Before / After -->
+    <div style="flex: 1; display: flex; flex-direction: column; gap: 12px;">
+      <!-- Before -->
+      <div style="background: rgba(240,96,96,0.08); border: 2px solid rgba(240,96,96,0.25); border-radius: 8px; padding: 16px 20px;">
+        <div style="font-family: var(--font-display); font-size: 14px; font-weight: 700; color: var(--accent-red); margin-bottom: 8px;">Before: kafka_ex + kayrock on old kpro_schema</div>
+        <ul style="margin: 0; padding: 0;">
+          <li style="font-size: 18px; padding: 3px 0; padding-left: 24px;"><span style="color: var(--text-secondary);">Produce V0–V5 only</span></li>
+          <li style="font-size: 18px; padding: 3px 0; padding-left: 24px;"><span style="color: var(--text-secondary);">No flexible versions (KIP-482)</span></li>
+          <li style="font-size: 18px; padding: 3px 0; padding-left: 24px;"><span style="color: var(--text-secondary);">No compact types</span></li>
+          <li style="font-size: 18px; padding: 3px 0; padding-left: 24px;"><span style="color: var(--text-secondary);">Stuck on older Kafka clusters</span></li>
+        </ul>
+      </div>
+      <!-- After -->
+      <div style="background: rgba(92,232,180,0.08); border: 2px solid rgba(92,232,180,0.25); border-radius: 8px; padding: 16px 20px;">
+        <div style="font-family: var(--font-display); font-size: 14px; font-weight: 700; color: var(--accent-green); margin-bottom: 8px;">After: updated kpro_schema + generator fixes</div>
+        <ul style="margin: 0; padding: 0;">
+          <li style="font-size: 18px; padding: 3px 0; padding-left: 24px;"><span style="color: var(--text-body);">Produce V0–V8</span></li>
+          <li style="font-size: 18px; padding: 3px 0; padding-left: 24px;"><span style="color: var(--text-body);">Full KIP-482 support</span></li>
+          <li style="font-size: 18px; padding: 3px 0; padding-left: 24px;"><span style="color: var(--text-body);"><code style="font-family: var(--font-mono); font-size: 16px;">compact_string</code>, <code style="font-family: var(--font-mono); font-size: 16px;">compact_array</code>, <code style="font-family: var(--font-mono); font-size: 16px;">tagged_fields</code></span></li>
+          <li style="font-size: 18px; padding: 3px 0; padding-left: 24px;"><span style="color: var(--text-body);">Works with latest Kafka</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Right: What actually changed (diff breakdown) -->
+    <div style="flex: 1; display: flex; flex-direction: column; gap: 0;">
+      <div style="font-family: var(--font-display); font-size: 15px; font-weight: 700; color: var(--accent-warm); margin-bottom: 12px;">What we actually changed:</div>
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <span style="font-family: var(--font-mono); font-size: 16px; color: var(--accent); min-width: 160px;">serialize.ex</span>
+          <span style="font-family: var(--font-mono); font-size: 15px; color: var(--accent-green);">+60 lines</span>
+          <span style="font-size: 14px; color: var(--text-dim);">compact_type functions</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <span style="font-family: var(--font-mono); font-size: 16px; color: var(--accent); min-width: 160px;">deserialize.ex</span>
+          <span style="font-family: var(--font-mono); font-size: 15px; color: var(--accent-green);">+50 lines</span>
+          <span style="font-size: 14px; color: var(--text-dim);">compact_type parsing</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <span style="font-family: var(--font-mono); font-size: 16px; color: var(--accent); min-width: 160px;">generate.ex</span>
+          <span style="font-family: var(--font-mono); font-size: 15px; color: var(--accent-green);">+40 lines</span>
+          <span style="font-size: 14px; color: var(--text-dim);">flexible header logic</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <span style="font-family: var(--font-mono); font-size: 16px; color: var(--accent); min-width: 160px;">record_batch.ex</span>
+          <span style="font-family: var(--font-mono); font-size: 15px; color: var(--text-dim);">~0 lines</span>
+          <span style="font-size: 14px; color: var(--text-dim);">(format unchanged!)</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <span style="font-family: var(--font-mono); font-size: 16px; color: var(--accent); min-width: 160px;">produce.ex</span>
+          <span style="font-family: var(--font-mono); font-size: 15px; color: var(--accent-warm);">regenerated</span>
+          <span style="font-size: 14px; color: var(--text-dim);">automatic from schema</span>
+        </div>
+      </div>
+      <div style="margin-top: 20px; padding: 14px 18px; background: var(--bg-elevated); border-radius: 8px; border-left: 4px solid var(--accent-warm);">
+        <div style="font-family: var(--font-mono); font-size: 16px; color: var(--accent-warm);">~150 lines of manual changes</div>
+        <div style="font-family: var(--font-mono); font-size: 16px; color: var(--text-secondary); margin-top: 4px;">&rarr; hundreds of structs regenerated</div>
+      </div>
+    </div>
+  </div>
+
+  <p style="margin-top: 12px; font-size: 20px; font-weight: 700; color: var(--text-body);">
+    The generator design made a 2-version jump tractable.
+  </p>
+  <div class="slide-footer">Distilling the Stream</div>
+  <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
+  <!-- SPEAKER: Anton. "This is the payoff of the generator architecture. When Kafka added flexible versions — compact strings, compact arrays, tagged fields — we needed to support it. In any hand-written protocol library, that's months of work. For us? 150 lines of changes to the generator and serializer. Everything else was regenerated." -->
+</div>
+
+<!-- ====================================================
+     SLIDE: P4 Tradeoffs — honest costs
+     ==================================================== -->
+<div class="slide" id="slide-p4-tradeoffs" style="padding: 40px 60px;">
+  <h2><span class="accent">Tradeoffs</span></h2>
+
+  <div style="display: flex; gap: 28px; flex: 1; margin-top: 4px;">
+
+    <!-- LEFT: What works well -->
+    <div style="flex: 1; display: flex; flex-direction: column; background: rgba(92,232,180,0.04); border: 1px solid rgba(92,232,180,0.2); border-top: 3px solid var(--accent-green); border-radius: 8px; padding: 18px 22px;">
+      <div style="font-family: var(--font-display); font-size: 13px; font-weight: 700; color: var(--accent-green); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 14px;">What works well</div>
+
+      <div style="display: flex; flex-direction: column; gap: 11px; font-family: var(--font-mono); font-size: 15px; line-height: 1.35;">
+        <div><span style="color: var(--accent-green); font-weight: 700; margin-right: 10px;">+</span><span style="color: var(--text-primary);">Schema changes</span> <span style="color: var(--text-dim);">&rarr;</span> regenerate <span style="color: var(--text-dim);">&rarr;</span> <span style="color: var(--accent-green);">done</span></div>
+        <div><span style="color: var(--accent-green); font-weight: 700; margin-right: 10px;">+</span><span style="color: var(--text-primary);">Bit syntax</span> = protocol spec as code</div>
+        <div><span style="color: var(--accent-green); font-weight: 700; margin-right: 10px;">+</span><span style="color: var(--text-primary);">iodata</span> = zero-copy composition</div>
+        <div><span style="color: var(--accent-green); font-weight: 700; margin-right: 10px;">+</span><span style="color: var(--text-primary);">Pattern matching</span> = natural dispatch</div>
+        <div><span style="color: var(--accent-green); font-weight: 700; margin-right: 10px;">+</span><span style="color: var(--text-primary);">Structs</span> = self-documenting data</div>
+        <div><span style="color: var(--accent-green); font-weight: 700; margin-right: 10px;">+</span><span style="color: var(--text-primary);">Compile-time</span> = no runtime overhead</div>
+        <div><span style="color: var(--accent-green); font-weight: 700; margin-right: 10px;">+</span><span style="color: var(--text-primary);">Elixir protocols</span> = version dispatch</div>
+      </div>
+    </div>
+
+    <!-- RIGHT: What's hard -->
+    <div style="flex: 1; display: flex; flex-direction: column; background: rgba(240,96,96,0.04); border: 1px solid rgba(240,96,96,0.2); border-top: 3px solid var(--accent-red); border-radius: 8px; padding: 18px 22px;">
+      <div style="font-family: var(--font-display); font-size: 13px; font-weight: 700; color: var(--accent-red); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 14px;">What's hard</div>
+
+      <div style="display: flex; flex-direction: column; gap: 11px; font-family: var(--font-mono); font-size: 15px; line-height: 1.35;">
+        <div><span style="color: var(--accent-red); font-weight: 700; margin-right: 10px;">&minus;</span><span style="color: var(--text-primary);">Compile times</span> grow with API count</div>
+        <div><span style="color: var(--accent-red); font-weight: 700; margin-right: 10px;">&minus;</span><span style="color: var(--text-primary);">Generated code</span> is hard to debug</div>
+        <div><span style="color: var(--accent-red); font-weight: 700; margin-right: 10px;">&minus;</span><span style="color: var(--text-primary);">Schema source</span> (kpro_schema) is Erlang</div>
+        <div><span style="color: var(--accent-red); font-weight: 700; margin-right: 10px;">&minus;</span><span style="color: var(--text-primary);">Macro errors</span> are cryptic</div>
+        <div><span style="color: var(--accent-red); font-weight: 700; margin-right: 10px;">&minus;</span>Less community than <span style="color: var(--text-primary);">brod</span> / <span style="color: var(--text-primary);">erlkaf</span></div>
+        <div><span style="color: var(--accent-red); font-weight: 700; margin-right: 10px;">&minus;</span>Must <span style="color: var(--text-primary);">track Kafka protocol evolution</span></div>
+        <div><span style="color: var(--accent-red); font-weight: 700; margin-right: 10px;">&minus;</span><span style="color: var(--text-primary);">Testing</span>: need real broker or mocks</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom line -->
+  <div style="margin-top: 20px; text-align: center;">
+    <p style="font-family: var(--font-display); font-size: 24px; color: var(--text-primary); line-height: 1.35;">
+      Not <span style="color: var(--text-dim);">"better"</span> &mdash; <span style="color: var(--accent-warm); font-weight: 700;">different.</span><br>
+      <span style="font-size: 20px; color: var(--text-secondary);">Right tool for different constraints.</span>
+    </p>
+  </div>
+
+  <div class="slide-footer">Distilling the Stream</div>
+  <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
+  <!-- SPEAKER: Anton. "Nothing is free. The generator approach buys us schema-diff updates and zero-copy serialization, but compile times grow, macro errors are cryptic, and generated code is genuinely hard to debug. The kpro_schema source is still Erlang. The community is smaller than brod's or erlkaf's. We track Kafka protocol evolution by hand because no one else does it for us. This isn't better — it's different. And different is what we needed." -->
+</div>
+
+<!-- ====================================================
+     SLIDE 23: Diskless Kafka + Infrastructure Evolution
+     ==================================================== -->
+<div class="slide" id="slide-24">
+  <h2>The Kafka You Deploy Is <span class="accent">Changing</span></h2>
+  <ul style="margin-top: 24px;">
+    <li><b>KRaft mode</b> — ZooKeeper is gone. Simpler operations, faster failovers.</li>
+    <li><b>Tiered storage</b> (KIP-405) — hot data on disk, cold data in S3. Infinite retention, lower cost.</li>
+    <li><b>Diskless brokers</b> (WarpStream, AutoMQ) — no local disks at all. Object storage only. Dramatically cheaper MSK alternatives.</li>
+    <li><b>Shared-nothing rebalancing</b> — consumer groups recover in seconds, not minutes.</li>
+  </ul>
+  <div class="callout" style="margin-top: 24px;">
+    <p>The generator design is why we can adopt these changes painlessly.</p>
+    <p>Same Kafka protocol. Same KafkaEx calls. Same Kafkaesque consumers. Update the schema, regenerate, ship.</p>
+  </div>
+  <div class="slide-footer">Distilling the Stream</div>
+  <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
+  <!-- SPEAKER: "This is the payoff of building on the Kafka protocol rather than a specific deployment. WarpStream runs on S3 — no EBS volumes, no broker disks. We tested it: swapped the bootstrap servers, redeployed. Zero code changes. Our consumers, our idempotency plugins, our outbox — all of it just worked. That's the benefit of the protocol being the contract, not the infrastructure." -->
+</div>
+
+<!-- ====================================================
+     SLIDE 23: Pillar 4 Takeaway
+     ==================================================== -->
+<div class="slide takeaway" id="slide-25">
+  <h2>Pillar 4 Takeaway</h2>
+  <p class="takeaway-text">Build on the protocol, not the deployment.<br>Infrastructure changes. Your code shouldn't have to.</p>
+  <p style="margin-top: 28px; font-size: 22px; color: #666;">
+    Diskless Kafka, tiered storage, KRaft — all free upgrades<br>
+    when your application speaks the standard protocol.
+  </p>
+  <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
+</div>
+
+<!-- ====================================================
+     SLIDE 25: What Changes Monday (NEW)
+     ==================================================== -->
+<div class="slide" id="slide-26">
+  <h2>What Changes <span class="accent-warm">Monday</span></h2>
+  <div class="action-items">
+    <div class="action-item">
+      <span class="action-num">01</span>
+      <div>
+        <h3>Audit one consumer for idempotency</h3>
+        <p>Pick your most critical handler. Ask: "What happens if this message arrives twice?"</p>
+      </div>
+    </div>
+    <div class="action-item">
+      <span class="action-num">02</span>
+      <div>
+        <h3>Standardize your consumer supervisor pattern</h3>
+        <p>One pattern. One way to start a consumer. Document it. Enforce it.</p>
+      </div>
+    </div>
+    <div class="action-item">
+      <span class="action-num">03</span>
+      <div>
+        <h3>Watch the Kafkaesque repo</h3>
+        <p>Open-source drop coming. The patterns work even without the library.</p>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer">Distilling the Stream</div>
+  <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
+  <!-- SPEAKER: These are the three things you can start doing tomorrow. You don't need Kafkaesque for #1 and #2. -->
+</div>
+
+<!-- ====================================================
+     SLIDE 26: Summary — four-up cards
+     ==================================================== -->
+<div class="slide" id="slide-27">
+  <h2>Four Things We Learned</h2>
+  <div class="three-up" style="grid-template-columns: repeat(4, 1fr);">
+    <div class="summary-card">
+      <div class="card-num">Pillar 1</div>
+      <h3>Write the boilerplate once.</h3>
+      <p>Convention over configuration scales.</p>
+    </div>
+    <div class="summary-card">
+      <div class="card-num">Pillar 2</div>
+      <h3>Idempotency is a design decision.</h3>
+      <p>Domain-level first. Infrastructure second.</p>
+    </div>
+    <div class="summary-card">
+      <div class="card-num">Pillar 3</div>
+      <h3>OTP supervision is a strategy.</h3>
+      <p>"Let it crash" — engineering, not ideology.</p>
+    </div>
+    <div class="summary-card">
+      <div class="card-num">Pillar 4</div>
+      <h3>Build on the protocol.</h3>
+      <p>Infrastructure changes. Your code doesn't.</p>
+    </div>
+  </div>
+  <div class="slide-footer">Distilling the Stream</div>
+  <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
+  <!-- SPEAKER: "Photograph this slide." These are the four things worth keeping. Let it sit for a few seconds. -->
+</div>
+
+<!-- ====================================================
+     SLIDE 27: What's in the Future
+     ==================================================== -->
+<div class="slide" id="slide-28">
+  <h2>What's in the <span class="accent">Future</span></h2>
+  <ul style="margin-top: 24px;">
+    <li><b>Simplified encoding/decoding</b> — first-class Avro and Protobuf support with schema registry integration. Define your schema, get serialization for free</li>
+    <li><b>Web UI</b> — real-time metrics, consumer health, lag monitoring, and topic topology across all Kafkaesque services</li>
+  </ul>
+  <div class="callout" style="margin-top: 24px;">
+    <p>The goal: make Kafka in Elixir feel as natural as Ecto feels for Postgres.</p>
+  </div>
+  <div class="slide-footer">Distilling the Stream</div>
+  <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
+  <!-- SPEAKER: "These are the things we're building next. Avro/Proto support means you stop hand-rolling encoders — define a .proto file, and Kafkaesque generates the serializer plugin. The Web UI gives you real-time visibility into consumer lag, health, and topology — no more guessing what's happening in production." -->
+</div>
+
+<!-- ====================================================
+     SLIDE 28: CTA + Q&A — narrative close + QR
+     ==================================================== -->
+<div class="slide cta" id="slide-29">
+  <h2>Take These Home</h2>
+  <div class="cta-items">
+    <div class="cta-item">Design for idempotency <strong>from day one</strong></div>
+    <div class="cta-item">Let OTP do the recovery work — <strong>don't fight it</strong></div>
+    <div class="cta-item">Kafkaesque is being <strong>open-sourced</strong> — watch the repo</div>
+  </div>
+  <div style="display: flex; align-items: center; gap: 48px; margin-top: 32px;">
+    <div style="text-align: center;">
+      <img src="images/qr-kayrock.svg" alt="Kayrock QR" style="width: 140px; height: 140px;">
+      <div style="font-family: var(--font-mono); font-size: 14px; color: var(--text-secondary); margin-top: 8px;">kafkaex/kayrock</div>
+    </div>
+    <div style="text-align: center;">
+      <img src="images/qr-kafka_ex.svg" alt="KafkaEx QR" style="width: 140px; height: 140px;">
+      <div style="font-family: var(--font-mono); font-size: 14px; color: var(--text-secondary); margin-top: 8px;">kafkaex/kafka_ex</div>
+    </div>
+    <div style="text-align: center;">
+      <img src="images/qr-kafkaesque.svg" alt="Kafkaesque QR" style="width: 140px; height: 140px;">
+      <div style="font-family: var(--font-mono); font-size: 14px; color: var(--accent); margin-top: 8px;">fresha/kafkaesque</div>
+    </div>
+  </div>
+  <p class="cta-close">Duplicate notifications? Missing messages? That was the last time.</p>
+  <div class="speakers-row">
+    <div class="speaker">
+      <strong>Piotr Rybarczyk</strong>
+      github.com/Argonus
+    </div>
+    <div class="speaker">
+      <strong>Anton Borisov</strong>
+      github.com/fresh-borzoni
+    </div>
+  </div>
+  <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
+  <!-- SPEAKER: "That client with the duplicate appointments? We never saw her again. Because the Inbox pattern is running in every service." Open floor for questions. Both speakers on stage. -->
+</div>
+</body>
+</html>
