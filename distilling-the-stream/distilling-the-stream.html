@@ -3,7 +3,7 @@ w<!DOCTYPE html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="color-scheme" content="dark">
+  <meta name="color-scheme" content="light">
   <title>Distilling the Stream: Kafka-Backed Elixir at Scale</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -13,17 +13,17 @@ w<!DOCTYPE html>
        DESIGN TOKENS
        ============================================ */
     :root {
-      --bg-deep:      #0A0B12;
-      --bg-surface:   #12132A;
-      --bg-elevated:  #1A1B36;
-      --accent:       #7C5CFC;
-      --accent-warm:  #E8A838;
-      --accent-green: #5CE8B4;
-      --accent-red:   #F06060;
-      --text-primary: #EEEEF0;
-      --text-body:    #C0C0D8;
-      --text-secondary: #8B8BA0;
-      --text-dim:     #555568;
+      --bg-deep:      #FFFFFF;
+      --bg-surface:   #F5F5FA;
+      --bg-elevated:  #EEEEF4;
+      --accent:       #6A4AEA;
+      --accent-warm:  #B87420;
+      --accent-green: #0E9E6C;
+      --accent-red:   #D83A3A;
+      --text-primary: #0A0B12;
+      --text-body:    #2A2A3A;
+      --text-secondary: #555568;
+      --text-dim:     #8B8BA0;
       --radius:       10px;
       --font-display: 'Sora', 'Helvetica Neue', sans-serif;
       --font-body:    'DM Sans', 'Helvetica Neue', sans-serif;
@@ -37,7 +37,7 @@ w<!DOCTYPE html>
 
     body {
       font-family: var(--font-body);
-      background: #060608;
+      background: #E8E8EC;
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
     }
@@ -87,6 +87,10 @@ w<!DOCTYPE html>
       opacity: 0.85;
       z-index: 2;
       pointer-events: none;
+      /* Source PNG is a white wordmark + purple glow.
+         invert(1) hue-rotate(180deg) maps white→black but preserves the purple
+         (invert turns purple to its complement, hue-rotate returns it). */
+      filter: invert(1) hue-rotate(180deg);
     }
 
     .slide.divider .slide-logo {
@@ -169,9 +173,9 @@ w<!DOCTYPE html>
       z-index: 0;
       pointer-events: none;
       background:
-        radial-gradient(ellipse at 15% 85%, rgba(124,92,252,0.12) 0%, transparent 50%),
-        radial-gradient(ellipse at 85% 25%, rgba(124,92,252,0.06) 0%, transparent 45%),
-        radial-gradient(ellipse at 50% 50%, rgba(20,20,50,0.4) 0%, transparent 70%);
+        radial-gradient(ellipse at 15% 85%, rgba(106,74,234,0.10) 0%, transparent 50%),
+        radial-gradient(ellipse at 85% 25%, rgba(106,74,234,0.05) 0%, transparent 45%),
+        radial-gradient(ellipse at 50% 50%, rgba(106,74,234,0.03) 0%, transparent 70%);
       animation: titleGlow 8s ease-in-out infinite alternate;
     }
 
@@ -313,7 +317,7 @@ w<!DOCTYPE html>
 
     .slide.incident blockquote {
       font-size: 30px;
-      color: #E0E0E8;
+      color: #2A2A3A;
       font-style: italic;
       border-left: none;
       margin-top: 28px;
@@ -345,13 +349,13 @@ w<!DOCTYPE html>
       border: 1px solid rgba(124,92,252,0.08);
     }
 
-    .kw  { color: #C792EA; }
-    .fn  { color: #82AAFF; }
-    .st  { color: #C3E88D; }
-    .cm  { color: #546E7A; font-style: italic; }
-    .nm  { color: #F78C6C; }
-    .hl  { background: rgba(124,92,252,0.2); border-radius: 3px; padding: 1px 5px; }
-    .op  { color: #89DDFF; }
+    .kw  { color: #8250DF; }
+    .fn  { color: #1F6FEB; }
+    .st  { color: #0A7A32; }
+    .cm  { color: #6E7781; font-style: italic; }
+    .nm  { color: #BC4C00; }
+    .hl  { background: rgba(106,74,234,0.18); border-radius: 3px; padding: 1px 5px; }
+    .op  { color: #0969DA; }
 
     /* Side-by-side code */
     .code-columns {
@@ -388,12 +392,7 @@ w<!DOCTYPE html>
        ============================================ */
     .slide.takeaway {
       background: linear-gradient(135deg, #F7F7FB 0%, #EEEEF8 100%);
-      color: #1a1a2e;
-    }
-
-    .slide.takeaway::after {
-      mix-blend-mode: multiply;
-      opacity: 0.012;
+      color: var(--text-primary);
     }
 
     .slide.takeaway::before {
@@ -403,14 +402,14 @@ w<!DOCTYPE html>
       right: 70px;
       font-size: 320px;
       line-height: 1;
-      color: rgba(124,92,252,0.05);
+      color: rgba(106,74,234,0.10);
       font-family: Georgia, serif;
       pointer-events: none;
       z-index: 0;
     }
 
     .slide.takeaway h2 {
-      color: #1a1a2e;
+      color: var(--text-primary);
       font-size: 34px;
     }
 
@@ -426,14 +425,6 @@ w<!DOCTYPE html>
 
     .slide.takeaway p {
       color: #555;
-    }
-
-    /* Logo on light takeaway slides: the PNG is white-wordmark + purple glow.
-       invert(1) hue-rotate(180deg) maps white→black but preserves the purple
-       (invert turns purple to its complement, hue-rotate returns it to purple). */
-    .slide.takeaway .slide-logo {
-      filter: invert(1) hue-rotate(180deg);
-      opacity: 0.85;
     }
 
     /* ============================================
@@ -503,7 +494,7 @@ w<!DOCTYPE html>
     }
 
     .stack-layer.dim {
-      border-left-color: #2a2a40;
+      border-left-color: #C8C8D4;
       opacity: 0.55;
     }
 
@@ -577,8 +568,8 @@ w<!DOCTYPE html>
     }
 
     .rb-bar.idle {
-      background: rgba(255,255,255,0.02);
-      border: 1px solid rgba(255,255,255,0.06);
+      background: rgba(0,0,0,0.03);
+      border: 1px solid rgba(0,0,0,0.08);
       color: var(--text-dim);
     }
 
@@ -613,12 +604,12 @@ w<!DOCTYPE html>
       grid-template-columns: 150px repeat(3, 1fr);
       align-items: center;
       padding: 14px 0;
-      border-bottom: 1px solid rgba(255,255,255,0.05);
+      border-bottom: 1px solid rgba(0,0,0,0.08);
     }
 
     .cm-row.cm-header {
       padding-bottom: 16px;
-      border-bottom: 2px solid rgba(255,255,255,0.1);
+      border-bottom: 2px solid rgba(0,0,0,0.15);
     }
 
     .cm-header .cm-cell {
@@ -836,9 +827,28 @@ w<!DOCTYPE html>
     /* ============================================
        PRINT STYLES
        ============================================ */
+    @page { size: 1280px 720px; margin: 0; }
     @media print {
-      body { background: white; }
-      .slide { break-after: page; margin: 0; }
+      html, body { background: var(--bg-deep); margin: 0; padding: 0; }
+      body { gap: 0 !important; }
+      .slide {
+        margin: 0;
+        box-shadow: none !important;
+        /* Never split a slide across two pages, even if internal content
+           ends up slightly taller than 720px at print resolution. */
+        break-inside: avoid;
+        page-break-inside: avoid;
+        /* Override the base rule's `page-break-after: always`, which
+           produces a spurious trailing blank page in headless Chrome. */
+        break-after: auto;
+        page-break-after: auto;
+      }
+      /* Page break BEFORE every slide except the first — one break per
+         slide boundary, no extras at either end. */
+      .slide + .slide {
+        break-before: page;
+        page-break-before: always;
+      }
       .slide::after, .slide::before { display: none; }
     }
   </style>
@@ -852,8 +862,39 @@ w<!DOCTYPE html>
   <h1>Distilling<br><span>the Stream</span></h1>
   <p class="subtitle">Kafka-Backed Elixir at Scale</p>
   <p class="speakers">Piotr Rybarczyk &amp; Anton Borisov — Fresha</p>
-  <p class="conference">Code BEAM / ElixirConf 2026</p>
+  <p class="conference">ElixirConf 2026</p>
   <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
+</div>
+
+<!-- ====================================================
+     SLIDE 1b: Quick speaker introduction
+     ==================================================== -->
+<div class="slide" id="slide-1b" style="padding: 60px 80px;">
+  <h2>Who's <span class="accent">Talking</span></h2>
+
+  <div style="display: flex; gap: 40px; margin-top: 24px; flex: 1;">
+    <div style="flex: 1; background: var(--bg-elevated); border-radius: var(--radius); padding: 28px 32px; border-top: 4px solid var(--accent);">
+      <div style="font-family: var(--font-mono); font-size: 12px; font-weight: 700; letter-spacing: 0.15em; color: var(--accent); text-transform: uppercase; margin-bottom: 10px;">Speaker</div>
+      <h3 style="font-family: var(--font-display); font-size: 30px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px;">Piotr Rybarczyk</h3>
+      <div style="font-family: var(--font-display); font-size: 18px; color: var(--text-secondary); margin-bottom: 18px;">Staff Software Engineer, Fresha</div>
+      <p style="font-size: 18px; color: var(--text-body); line-height: 1.5;">Elixir on the event-driven side of Fresha. Maintainer of <code style="font-family: var(--font-mono); font-size: 16px; color: var(--accent);">kafka_ex</code> and <code style="font-family: var(--font-mono); font-size: 16px; color: var(--accent);">kayrock</code>.</p>
+    </div>
+
+    <div style="flex: 1; background: var(--bg-elevated); border-radius: var(--radius); padding: 28px 32px; border-top: 4px solid var(--accent-warm);">
+      <div style="font-family: var(--font-mono); font-size: 12px; font-weight: 700; letter-spacing: 0.15em; color: var(--accent-warm); text-transform: uppercase; margin-bottom: 10px;">Speaker</div>
+      <h3 style="font-family: var(--font-display); font-size: 30px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px;">Anton Borisov</h3>
+      <div style="font-family: var(--font-display); font-size: 18px; color: var(--text-secondary); margin-bottom: 18px;">Principal Data Architect, Fresha</div>
+      <p style="font-size: 18px; color: var(--text-body); line-height: 1.5;">Works on Kafka infrastructure. On a mission to introduce BEAM to the Apache world.</p>
+    </div>
+  </div>
+
+  <div style="margin-top: 28px; padding: 14px 20px; background: rgba(106,74,234,0.06); border-left: 4px solid var(--accent); border-radius: 6px;">
+    <p style="font-size: 18px; color: var(--text-body);">Both of us have been running Kafka on Elixir in production at Fresha for years &mdash; what follows is what we learned the hard way.</p>
+  </div>
+
+  <div class="slide-footer">Distilling the Stream</div>
+  <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
+  <!-- SPEAKER: Quick 30-second intro. Names, roles, one-line framing: "we run Kafka on Elixir at Fresha, scars to prove it." Then move on. -->
 </div>
 
 <!-- ====================================================
@@ -869,7 +910,7 @@ w<!DOCTYPE html>
   <img src="images/img-slide02-bells.png" alt="Duplicate notifications" style="position: absolute; top: 40px; right: 56px; width: 180px; height: 180px; object-fit: contain; z-index: 2; opacity: 0.85; border-radius: 12px;">
   <div class="slide-footer">Distilling the Stream</div>
   <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
-  <!-- SPEAKER: "Our first event-driven service. Client Notifications. We rolled it out to production and... clients got the same notification twice. Or didn't get one at all. Not everything goes according to plan." Pause. Then: "This talk is about how we fixed that. And everything else." -->
+  <!-- SPEAKER: "Our third event-driven service. Client Notifications. We rolled it out to production and... clients got the same notification twice. Or didn't get one at all. Not everything goes according to plan." Pause. Then: "This talk is about how we fixed that. And everything else." -->
 </div>
 
 <!-- ====================================================
@@ -1004,7 +1045,7 @@ w<!DOCTYPE html>
     <div style="flex: 1; display: flex; flex-direction: column; gap: 8px;">
 
       <!-- Client Notifications -->
-      <div style="background: rgba(255,255,255,0.04); border: 2px solid rgba(255,255,255,0.12); border-radius: 10px; padding: 12px 22px;">
+      <div style="background: rgba(0,0,0,0.04); border: 2px solid rgba(0,0,0,0.12); border-radius: 10px; padding: 12px 22px;">
         <div style="font-family: var(--font-display); font-size: 16px; font-weight: 700; color: var(--text-primary);">Client Notifications</div>
         <div style="font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary); margin-top: 3px;">produce() / fetch() / create_topic() / consumer groups</div>
       </div>
@@ -1015,8 +1056,8 @@ w<!DOCTYPE html>
       <!-- Kafkaesque (framework — the main subject of the talk) -->
       <div style="background: rgba(124,92,252,0.1); border: 3px solid rgba(124,92,252,0.6); border-radius: 10px; padding: 12px 22px; box-shadow: 0 0 20px rgba(124,92,252,0.12), inset 0 0 20px rgba(124,92,252,0.04);">
         <div style="display: flex; align-items: baseline; gap: 12px; margin-bottom: 8px;">
-          <span style="font-family: var(--font-mono); font-size: 18px; font-weight: 700; color: var(--accent);">kafkaesque</span>
-          <span style="font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary);">(framework — plugins, DLQ, observability, health checks, idempotency)</span>
+          <span style="font-family: var(--font-mono); font-size: 18px; font-weight: 700; color: var(--accent);">framework</span>
+          <span style="font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary);">(plugins, DLQ, observability, health checks, idempotency)</span>
         </div>
         <div style="display: flex; gap: 8px;">
           <div style="flex: 1; background: rgba(124,92,252,0.08); border: 1px solid rgba(124,92,252,0.25); border-radius: 6px; padding: 6px 10px;">
@@ -1040,8 +1081,8 @@ w<!DOCTYPE html>
       <!-- kafka_ex -->
       <div style="background: rgba(232,168,56,0.08); border: 2px solid rgba(232,168,56,0.35); border-radius: 10px; padding: 10px 22px;">
         <div style="display: flex; align-items: baseline; gap: 12px; margin-bottom: 8px;">
-          <span style="font-family: var(--font-mono); font-size: 16px; font-weight: 700; color: var(--accent-warm);">kafka_ex</span>
-          <span style="font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary);">(Elixir client library)</span>
+          <span style="font-family: var(--font-mono); font-size: 16px; font-weight: 700; color: var(--accent-warm);">client</span>
+          <span style="font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary);">(connections, routing, consumer groups)</span>
         </div>
         <div style="display: flex; gap: 8px;">
           <div style="flex: 1; background: rgba(232,168,56,0.06); border: 1px solid rgba(232,168,56,0.18); border-radius: 6px; padding: 8px 12px;">
@@ -1065,8 +1106,8 @@ w<!DOCTYPE html>
       <!-- kayrock -->
       <div style="background: rgba(124,92,252,0.06); border: 2px solid rgba(124,92,252,0.3); border-radius: 10px; padding: 10px 22px;">
         <div style="display: flex; align-items: baseline; gap: 12px; margin-bottom: 8px;">
-          <span style="font-family: var(--font-mono); font-size: 16px; font-weight: 700; color: var(--accent);">kayrock</span>
-          <span style="font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary);">(generated protocol layer)</span>
+          <span style="font-family: var(--font-mono); font-size: 16px; font-weight: 700; color: var(--accent);">protocol</span>
+          <span style="font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary);">(generated wire-format codecs)</span>
         </div>
         <div style="display: flex; gap: 8px;">
           <div style="flex: 1; background: rgba(124,92,252,0.06); border: 1px solid rgba(124,92,252,0.15); border-radius: 6px; padding: 8px 12px;">
@@ -1111,7 +1152,7 @@ w<!DOCTYPE html>
 
   <div class="slide-footer">Distilling the Stream</div>
   <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
-  <!-- SPEAKER: "Walk this bottom-up. kpro_schema gives us the Kafka protocol definitions — extracted from the Java source at compile time. Kayrock generates Elixir structs and serializers from those schemas. KafkaEx uses Kayrock to manage connections, routing, and consumer groups. Your app calls produce() and fetch() — it never touches bytes." -->
+  <!-- SPEAKER: Start from the BOTTOM and tell the story from Kafka's perspective. Kafka speaks a binary wire protocol — that protocol is what kpro_schema captures, extracted straight from the Kafka Java source. Above it, the `protocol` layer turns those wire definitions into Elixir structs and (de)serializers so nothing in our app has to touch bytes. The `client` layer handles the actual Kafka conversation: TCP connections, broker discovery, partition routing, consumer-group coordination, version negotiation. On top sits our `framework` — plugins, DLQ, telemetry, health checks, idempotency — all the cross-cutting concerns we refuse to re-implement per service. And your business code? It just calls produce()/fetch() on a consumer group. Kafka sees a well-behaved client; your team sees one consistent API. -->
 </div>
 
 <!-- ====================================================
@@ -1123,13 +1164,61 @@ w<!DOCTYPE html>
   <ul>
     <li>Fresha: global marketplace for salons &amp; spas</li>
     <li>Tens of millions of Kafka messages per day across dozens of Elixir services</li>
-    <li>Teams used Kaffe, Brod, Broadway, KafkaEx — everyone picked their own</li>
+    <li>Teams used Kaffe, Brod, KafkaEx — everyone picked their own</li>
     <li>Every team built their own metrics, alerts &amp; traces from scratch</li>
     <li>Today: one framework, one pattern, consistent across the org</li>
   </ul>
   <div class="slide-footer">Distilling the Stream</div>
   <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
   <!-- SPEAKER: Set the stakes. "We had four different Kafka libraries in production. Each team built their own observability. When something broke at 2 AM, you had to figure out which library, which metrics, which alerts applied to this service." -->
+</div>
+
+<!-- ====================================================
+     SLIDE 5b: Agenda — the four pillars
+     ==================================================== -->
+<div class="slide" id="slide-agenda">
+  <h2>Where We're <span class="accent">Going</span></h2>
+  <p style="font-size: 22px; color: var(--text-secondary); margin-top: -18px; margin-bottom: 24px;">Four pillars. One opinionated path through Kafka on Elixir.</p>
+
+  <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 4px;">
+
+    <div style="display: flex; align-items: center; gap: 22px; background: var(--bg-elevated); border-left: 4px solid var(--accent); border-radius: 8px; padding: 16px 24px;">
+      <div style="font-family: var(--font-display); font-size: 40px; font-weight: 800; color: var(--accent); min-width: 46px; line-height: 1;">1</div>
+      <div style="flex: 1;">
+        <div style="font-family: var(--font-display); font-size: 22px; font-weight: 700; color: var(--text-primary);">DevEx &amp; Velocity</div>
+        <div style="font-size: 17px; color: var(--text-secondary); margin-top: 2px;">Convention over configuration &mdash; one way to write a consumer.</div>
+      </div>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 22px; background: var(--bg-elevated); border-left: 4px solid var(--accent-warm); border-radius: 8px; padding: 16px 24px;">
+      <div style="font-family: var(--font-display); font-size: 40px; font-weight: 800; color: var(--accent-warm); min-width: 46px; line-height: 1;">2</div>
+      <div style="flex: 1;">
+        <div style="font-family: var(--font-display); font-size: 22px; font-weight: 700; color: var(--text-primary);">Idempotency &amp; Delivery</div>
+        <div style="font-size: 17px; color: var(--text-secondary); margin-top: 2px;">Outbox, inbox, at-least-once &mdash; making duplicates a non-event.</div>
+      </div>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 22px; background: var(--bg-elevated); border-left: 4px solid var(--accent-green); border-radius: 8px; padding: 16px 24px;">
+      <div style="font-family: var(--font-display); font-size: 40px; font-weight: 800; color: var(--accent-green); min-width: 46px; line-height: 1;">3</div>
+      <div style="flex: 1;">
+        <div style="font-family: var(--font-display); font-size: 22px; font-weight: 700; color: var(--text-primary);">Resilience via OTP</div>
+        <div style="font-size: 17px; color: var(--text-secondary); margin-top: 2px;">Supervision as a strategy &mdash; let it crash, then recover cleanly.</div>
+      </div>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 22px; background: var(--bg-elevated); border-left: 4px solid var(--accent-red); border-radius: 8px; padding: 16px 24px;">
+      <div style="font-family: var(--font-display); font-size: 40px; font-weight: 800; color: var(--accent-red); min-width: 46px; line-height: 1;">4</div>
+      <div style="flex: 1;">
+        <div style="font-family: var(--font-display); font-size: 22px; font-weight: 700; color: var(--text-primary);">Build on the Protocol</div>
+        <div style="font-size: 17px; color: var(--text-secondary); margin-top: 2px;">Infrastructure changes &mdash; your code shouldn't have to.</div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="slide-footer">Distilling the Stream</div>
+  <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
+  <!-- SPEAKER: "Here's where we're headed. Four pillars, each ~10 minutes. Skip around in your head if one lands harder than another — they're independent-ish, but they stack." -->
 </div>
 
 <!-- ====================================================
@@ -1151,7 +1240,7 @@ w<!DOCTYPE html>
   <div class="incident-label">The Problem</div>
   <h2>"How do I consume a Kafka topic?"</h2>
   <ul style="margin-top: 24px;">
-    <li>50+ services. Each consumer slightly different.</li>
+    <li>110+ services. Each consumer slightly different.</li>
     <li>At worst, no shared monitoring at all</li>
     <li>New engineer asks Slack — gets 5 different answers</li>
     <li><b>On call</b>, 2 AM alert: "consumer is down" — but which pattern is this one?</li>
@@ -1173,8 +1262,22 @@ w<!DOCTYPE html>
   <span class="kw">use</span> Supervisor
 
   <span class="kw">def</span> <span class="fn">init</span>(_opts) <span class="kw">do</span>
+    <span class="cm"># Telemetry: attach handlers for lag, latency, errors</span>
+    :telemetry.attach_many(
+      <span class="st">"my-app-kafka"</span>,
+      [[<span class="nm">:kafka_ex</span>, <span class="nm">:consume</span>, <span class="nm">:stop</span>],
+       [<span class="nm">:kafka_ex</span>, <span class="nm">:consume</span>, <span class="nm">:exception</span>]],
+      <span class="op">&amp;</span><span class="fn">MyApp.KafkaMetrics.handle_event</span>/4, <span class="kw">nil</span>)
+
+    <span class="cm"># Healthcheck: is the consumer actually consuming?</span>
+    MyApp.Health.register(<span class="nm">:kafka_consumer</span>,
+      <span class="op">&amp;</span><span class="fn">MyApp.KafkaHealth.check</span>/0)
+
+    <span class="cm"># Dead-letter producer (hand-rolled)</span>
+    dlq <span class="op">=</span> {MyApp.DLQ, [topic: <span class="st">"my-topic.dlq"</span>]}
+
     children <span class="op">=</span> [
-      <span class="cm"># 15 more lines of boilerplate...</span>
+      dlq,
       {KafkaEx.ConsumerGroup, [
         group: <span class="st">"my-group"</span>,
         topics: [<span class="st">"my-topic"</span>],
@@ -1255,7 +1358,7 @@ w<!DOCTYPE html>
 <div class="slide takeaway" id="slide-12">
   <h2>Pillar 1 Takeaway</h2>
   <p class="takeaway-text">Write the boilerplate once.<br>Let your team focus on business logic.</p>
-  <p style="margin-top: 28px; font-size: 22px; color: #666;">
+  <p style="margin-top: 28px; font-size: 22px; color: #555;">
     Convention over configuration is not just a Rails idea.<br>
     It's how you scale a team's Kafka knowledge across an org.
   </p>
@@ -1271,7 +1374,7 @@ w<!DOCTYPE html>
   <p class="divider-sub">At-least-once delivery is a feature. Duplicates are not.</p>
   <p class="divider-byline">— Piotr Rybarczyk</p>
   <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
-  <!-- SPEAKER: Colleague takes over. Bridge from P1: "We solved the DX problem. But there's a more dangerous problem waiting — what happens when Kafka delivers a message twice?" -->
+  <!-- SPEAKER: Piotr continues. Bridge from P1: "We solved the DX problem. But there's a more dangerous problem waiting — what happens when Kafka delivers a message twice?" -->
 </div>
 
 <!-- ====================================================
@@ -1308,58 +1411,193 @@ w<!DOCTYPE html>
 </div>
 
 <!-- ====================================================
-     SLIDE 13: Domain idempotency — simplified
+     SLIDE 13: Domain-Level Guarantees — two rules
      ==================================================== -->
 <div class="slide" id="slide-15">
-  <h2>Rule #1: <span class="accent">Domain-Level Idempotency First</span></h2>
-  <ul>
-    <li>Design business logic so processing the same event twice has no side effect</li>
-    <li>Use natural keys + unique constraints — let the database enforce it</li>
-  </ul>
-  <!-- Two-path diagram: naive vs idempotent handler -->
-  <div style="display: flex; gap: 32px; margin-top: 24px;">
-    <!-- Shared top -->
-    <div style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 0;">
-      <div style="font-family: var(--font-display); font-size: 13px; font-weight: 700; color: var(--accent-red); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 10px;">Naive Handler</div>
-      <div style="background: var(--bg-elevated); border: 1px solid rgba(240,96,96,0.2); border-radius: 6px; padding: 8px 16px; font-family: var(--font-mono); font-size: 13px; color: var(--text-body); width: 100%; text-align: center;">Message arrives</div>
-      <div style="color: var(--accent-red); font-size: 16px; line-height: 1.6;">&#9660;</div>
-      <div style="background: var(--bg-elevated); border: 1px solid rgba(240,96,96,0.2); border-radius: 6px; padding: 8px 16px; font-family: var(--font-mono); font-size: 13px; color: var(--text-body); width: 100%; text-align: center;">Side effect executes</div>
-      <div style="color: var(--accent-red); font-size: 16px; line-height: 1.6;">&#9660;</div>
-      <div style="background: var(--bg-elevated); border: 1px solid rgba(240,96,96,0.2); border-radius: 6px; padding: 8px 16px; font-family: var(--font-mono); font-size: 13px; color: var(--accent-warm); width: 100%; text-align: center;">Same message arrives again</div>
-      <div style="color: var(--accent-red); font-size: 16px; line-height: 1.6;">&#9660;</div>
-      <div style="background: var(--bg-elevated); border: 1px solid rgba(240,96,96,0.2); border-radius: 6px; padding: 8px 16px; font-family: var(--font-mono); font-size: 13px; color: var(--text-body); width: 100%; text-align: center;">Side effect executes <strong style="color: var(--accent-red);">AGAIN</strong></div>
-      <div style="color: var(--accent-red); font-size: 16px; line-height: 1.6;">&#9660;</div>
-      <div style="background: rgba(240,96,96,0.12); border: 2px solid rgba(240,96,96,0.4); border-radius: 6px; padding: 8px 16px; font-family: var(--font-display); font-size: 14px; font-weight: 700; color: var(--accent-red); width: 100%; text-align: center;">Duplicate effect</div>
+  <h2>Rule #1: <span class="accent">Domain-Level Guarantees First</span></h2>
+  <p style="font-size: 20px; color: var(--text-secondary); margin-top: -4px; margin-bottom: 18px;">
+    Two guarantees, owned by the domain. Everything after this is how we keep them.
+  </p>
+
+  <div style="display: flex; gap: 24px; margin-top: 8px;">
+    <!-- Producer guarantee -->
+    <div style="flex: 1; background: rgba(232,168,56,0.08); border: 2px solid rgba(232,168,56,0.35); border-left: 4px solid var(--accent-warm); border-radius: 10px; padding: 22px 26px;">
+      <div style="font-family: var(--font-mono); font-size: 12px; color: var(--accent-warm); letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 12px;">Producer guarantee</div>
+      <div style="font-family: var(--font-display); font-size: 22px; font-weight: 700; color: var(--text-primary); line-height: 1.35;">
+        A domain change happens &rarr; the event <span style="color: var(--accent-warm);">must be published</span>.
+      </div>
+      <div style="font-family: var(--font-mono); font-size: 14px; color: var(--text-secondary); margin-top: 14px; line-height: 1.55;">
+        Change and event land together, or neither does.<br>
+        No "we published but failed to commit."<br>
+        No "we committed but failed to publish."
+      </div>
     </div>
 
-    <!-- Right: idempotent path -->
-    <div style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 0;">
-      <div style="font-family: var(--font-display); font-size: 13px; font-weight: 700; color: var(--accent-green); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 10px;">Idempotent Handler</div>
-      <div style="background: var(--bg-elevated); border: 1px solid rgba(92,232,180,0.2); border-radius: 6px; padding: 8px 16px; font-family: var(--font-mono); font-size: 13px; color: var(--text-body); width: 100%; text-align: center;">Message arrives</div>
-      <div style="color: var(--accent-green); font-size: 16px; line-height: 1.6;">&#9660;</div>
-      <div style="background: var(--bg-elevated); border: 1px solid rgba(92,232,180,0.2); border-radius: 6px; padding: 8px 16px; font-family: var(--font-mono); font-size: 13px; color: var(--text-body); width: 100%; text-align: center;">Check natural key / unique constraint</div>
-      <div style="color: var(--accent-green); font-size: 16px; line-height: 1.6;">&#9660;</div>
-      <div style="background: var(--bg-elevated); border: 1px solid rgba(92,232,180,0.2); border-radius: 6px; padding: 8px 16px; font-family: var(--font-mono); font-size: 13px; color: var(--accent-warm); width: 100%; text-align: center;">Same message arrives again</div>
-      <div style="color: var(--accent-green); font-size: 16px; line-height: 1.6;">&#9660;</div>
-      <div style="background: var(--bg-elevated); border: 1px solid rgba(92,232,180,0.2); border-radius: 6px; padding: 8px 16px; font-family: var(--font-mono); font-size: 13px; color: var(--text-body); width: 100%; text-align: center;">Duplicate detected &rarr; <strong style="color: var(--accent-green);">skip</strong></div>
-      <div style="color: var(--accent-green); font-size: 16px; line-height: 1.6;">&#9660;</div>
-      <div style="background: rgba(92,232,180,0.12); border: 2px solid rgba(92,232,180,0.4); border-radius: 6px; padding: 8px 16px; font-family: var(--font-display); font-size: 14px; font-weight: 700; color: var(--accent-green); width: 100%; text-align: center;">Same result</div>
+    <!-- Consumer guarantee -->
+    <div style="flex: 1; background: rgba(92,232,180,0.08); border: 2px solid rgba(92,232,180,0.35); border-left: 4px solid var(--accent-green); border-radius: 10px; padding: 22px 26px;">
+      <div style="font-family: var(--font-mono); font-size: 12px; color: var(--accent-green); letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 12px;">Consumer guarantee</div>
+      <div style="font-family: var(--font-display); font-size: 22px; font-weight: 700; color: var(--text-primary); line-height: 1.35;">
+        The same event arrives twice &rarr; the side effect happens <span style="color: var(--accent-green);">at most once</span>.
+      </div>
+      <div style="font-family: var(--font-mono); font-size: 14px; color: var(--text-secondary); margin-top: 14px; line-height: 1.55;">
+        Duplicates are inevitable &mdash; the design must tolerate them.<br>
+        Natural keys, unique constraints, idempotent writes.<br>
+        The database can enforce a lot of this for you.
+      </div>
     </div>
   </div>
-  <div class="callout">
-    <p>Idempotency is a design decision, not a library feature.</p>
-    <p>Infrastructure patterns help. They do not guarantee it.</p>
+
+  <div class="callout" style="margin-top: 22px;">
+    <p>These are design rules, not library features.</p>
+    <p>Infrastructure patterns help you keep them. They do not replace them.</p>
   </div>
   <div class="slide-footer">Distilling the Stream</div>
   <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
-  <!-- SPEAKER: This is the most important slide in the talk. Domain-level first. Always. The Inbox pattern (next slide) is the safety net, not the strategy. -->
+  <!-- SPEAKER: "Two guarantees. Producer side: when a domain change happens, the event has to be published — atomically with the change. Either both land, or neither does. Consumer side: when the same event comes in twice, the side effect happens at most once. Duplicates are inevitable — the design must tolerate them. Those are the rules. The rest of this pillar is how we keep them. Here's the pipeline in one picture." -->
 </div>
 
 <!-- ====================================================
-     SLIDE 14: Inbox — two strategies as plugins
+     SLIDE: End-to-end flow — App → DB → Debezium → Kafka → App (with inbox)
+     (shown right after Rule #1, before the producer/consumer deep-dives)
+     ==================================================== -->
+<div class="slide" id="slide-e2e-flow" style="padding: 36px 56px;">
+  <h2>End-to-End: <span class="accent">One Pipeline</span></h2>
+  <p style="font-size: 20px; color: var(--text-secondary); margin-top: -4px; margin-bottom: 18px;">
+    Follow a single event from <em>domain change</em> to <em>consumer side effect</em>.
+  </p>
+
+  <div style="display: flex; align-items: stretch; gap: 10px; flex: 1;">
+
+    <!-- Producer App -->
+    <div style="flex: 1; display: flex; flex-direction: column; background: rgba(232,168,56,0.08); border: 2px solid rgba(232,168,56,0.4); border-radius: 10px; padding: 14px 14px; text-align: center;">
+      <div style="font-family: var(--font-mono); font-size: 11px; color: var(--accent-warm); letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 6px;">Producer</div>
+      <div style="font-family: var(--font-display); font-size: 18px; font-weight: 700; color: var(--text-primary); line-height: 1.2;">App</div>
+      <div style="font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary); margin-top: 10px; line-height: 1.45;">
+        <span style="color: var(--accent-warm);">confirm_appointment/2</span><br>
+        domain change<br>+ outbox row
+      </div>
+      <div style="margin-top: auto; padding-top: 10px; font-family: var(--font-mono); font-size: 11px; color: var(--text-dim);">one transaction</div>
+    </div>
+
+    <!-- Arrow -->
+    <div style="display: flex; flex-direction: column; justify-content: center; align-items: center; min-width: 60px;">
+      <div style="font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); margin-bottom: 4px;">write</div>
+      <div style="color: var(--accent-warm); font-size: 24px;">&rarr;</div>
+    </div>
+
+    <!-- Postgres -->
+    <div style="flex: 1; display: flex; flex-direction: column; background: rgba(124,92,252,0.08); border: 2px solid rgba(124,92,252,0.45); border-radius: 10px; padding: 14px 14px; text-align: center;">
+      <div style="font-family: var(--font-mono); font-size: 11px; color: var(--accent); letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 6px;">Database</div>
+      <div style="font-family: var(--font-display); font-size: 18px; font-weight: 700; color: var(--text-primary); line-height: 1.2;">Postgres</div>
+      <div style="font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary); margin-top: 10px; line-height: 1.45;">
+        appointments<br>
+        <span style="color: var(--accent);">outbox_events</span><br>
+        WAL
+      </div>
+      <div style="margin-top: auto; padding-top: 10px; font-family: var(--font-mono); font-size: 11px; color: var(--text-dim);">durable</div>
+    </div>
+
+    <!-- Arrow -->
+    <div style="display: flex; flex-direction: column; justify-content: center; align-items: center; min-width: 60px;">
+      <div style="font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); margin-bottom: 4px;">tail WAL</div>
+      <div style="color: var(--accent); font-size: 24px;">&rarr;</div>
+    </div>
+
+    <!-- Debezium -->
+    <div style="flex: 1; display: flex; flex-direction: column; background: rgba(92,232,180,0.08); border: 2px solid rgba(92,232,180,0.4); border-radius: 10px; padding: 14px 14px; text-align: center;">
+      <div style="font-family: var(--font-mono); font-size: 11px; color: var(--accent-green); letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 6px;">CDC</div>
+      <div style="font-family: var(--font-display); font-size: 18px; font-weight: 700; color: var(--text-primary); line-height: 1.2;">Debezium</div>
+      <div style="font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary); margin-top: 10px; line-height: 1.45;">
+        reads WAL<br>
+        emits to Kafka<br>
+        no polling
+      </div>
+      <div style="margin-top: auto; padding-top: 10px; font-family: var(--font-mono); font-size: 11px; color: var(--text-dim);">near real-time</div>
+    </div>
+
+    <!-- Arrow -->
+    <div style="display: flex; flex-direction: column; justify-content: center; align-items: center; min-width: 60px;">
+      <div style="font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); margin-bottom: 4px;">publish</div>
+      <div style="color: var(--accent-green); font-size: 24px;">&rarr;</div>
+    </div>
+
+    <!-- Kafka -->
+    <div style="flex: 1; display: flex; flex-direction: column; background: rgba(240,96,96,0.08); border: 2px solid rgba(240,96,96,0.4); border-radius: 10px; padding: 14px 14px; text-align: center;">
+      <div style="font-family: var(--font-mono); font-size: 11px; color: var(--accent-red); letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 6px;">Broker</div>
+      <div style="font-family: var(--font-display); font-size: 18px; font-weight: 700; color: var(--text-primary); line-height: 1.2;">Kafka</div>
+      <div style="font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary); margin-top: 10px; line-height: 1.45;">
+        appointments<br>
+        .events-v1
+      </div>
+      <div style="margin-top: auto; padding-top: 10px; font-family: var(--font-mono); font-size: 11px; color: var(--text-dim);">at-least-once</div>
+    </div>
+
+    <!-- Arrow -->
+    <div style="display: flex; flex-direction: column; justify-content: center; align-items: center; min-width: 60px;">
+      <div style="font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); margin-bottom: 4px;">consume</div>
+      <div style="color: var(--accent-red); font-size: 24px;">&rarr;</div>
+    </div>
+
+    <!-- Consumer App (with Inbox) -->
+    <div style="flex: 1.15; display: flex; flex-direction: column; background: rgba(232,168,56,0.08); border: 2px solid rgba(232,168,56,0.4); border-radius: 10px; padding: 14px 14px; text-align: center; box-shadow: 0 0 18px rgba(232,168,56,0.1);">
+      <div style="font-family: var(--font-mono); font-size: 11px; color: var(--accent-warm); letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 6px;">Consumer</div>
+      <div style="font-family: var(--font-display); font-size: 18px; font-weight: 700; color: var(--text-primary); line-height: 1.2;">App</div>
+      <div style="margin-top: 10px; padding: 6px 8px; background: rgba(92,232,180,0.12); border: 1px dashed rgba(92,232,180,0.45); border-radius: 6px;">
+        <div style="font-family: var(--font-mono); font-size: 11px; color: var(--accent-green); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 2px;">Inbox</div>
+        <div style="font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary); line-height: 1.4;">UUID seen?<br>skip : handle</div>
+      </div>
+      <div style="margin-top: auto; padding-top: 10px; font-family: var(--font-mono); font-size: 11px; color: var(--text-dim);">exactly-once effect</div>
+    </div>
+  </div>
+
+  <div style="margin-top: 18px; padding: 12px 18px; background: var(--bg-elevated); border-radius: 8px; border-left: 4px solid var(--accent);">
+    <div style="font-family: var(--font-display); font-size: 17px; color: var(--text-primary); line-height: 1.4;">
+      <span style="color: var(--accent-warm);">Outbox</span> makes producing safe.
+      <span style="color: var(--accent-green);">Inbox</span> makes consuming safe.
+      Together: at-least-once delivery, exactly-once effect.
+    </div>
+  </div>
+
+  <div class="slide-footer">Distilling the Stream</div>
+  <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
+  <!-- SPEAKER: "One event, left to right. App commits domain change plus outbox row in a single Postgres transaction. Debezium tails the WAL — no polling, no cron — and publishes to Kafka. Consumer picks it up, and before any side effect checks the Inbox: UUID seen? skip : handle. That's the map. Now let's zoom in — producer side first, then consumer." -->
+</div>
+
+<!-- ====================================================
+     SLIDE: Producer implementation — Transactional Outbox + CDC
+     ==================================================== -->
+<div class="slide code-slide" id="slide-17">
+  <h2>Producer Side: <span class="accent">Transactional Outbox + CDC</span></h2>
+  <pre><span class="cm"># Domain change + event in ONE database transaction</span>
+<span class="kw">def</span> <span class="fn">confirm_appointment</span>(appointment, params) <span class="kw">do</span>
+  changeset = Appointment.confirm_changeset(appointment, params)
+
+  Multi.new()
+  <span class="op">|&gt;</span> Multi.update(<span class="nm">:appointment</span>, changeset)
+  <span class="op">|&gt;</span> Multi.run(<span class="nm">:outbox</span>, <span class="kw">fn</span> repo, <span class="hl">%{appointment: confirmed}</span> <span class="op">-&gt;</span>
+    repo.insert(<span class="hl">%OutboxEvent{</span>
+      <span class="hl">topic_name: <span class="st">"appointments.events-v1"</span>,</span>
+      <span class="hl">event_type: <span class="st">"appointment_confirmed"</span>,</span>
+      <span class="hl">partition_key: confirmed.provider_id,</span>
+      <span class="hl">payload: Protobuf.encode(confirmed)</span>
+    <span class="hl">}</span>)
+  <span class="kw">end</span>)
+  <span class="op">|&gt;</span> Repo.transaction()
+<span class="kw">end</span></pre>
+  <div class="callout" style="margin-top: 16px;">
+    <p>The producer guarantee in code: change and event in one transaction.</p>
+    <p>Debezium tails the WAL and publishes to Kafka. Your app never calls Kafka directly.</p>
+  </div>
+  <div class="slide-footer">Distilling the Stream</div>
+  <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
+  <!-- SPEAKER: "Producer implementation. Write an OutboxEvent in the same transaction as your domain change. Either both land, or neither does — that's the producer guarantee in code. Debezium handles the rest: tails the WAL, publishes to Kafka, no polling, no cron. Now the consumer side." -->
+</div>
+
+<!-- ====================================================
+     SLIDE: Consumer implementation — Inbox, two strategies as plugins
      ==================================================== -->
 <div class="slide code-slide" id="slide-16">
-  <h2>The Inbox: <span class="accent">Two Strategies</span></h2>
+  <h2>Consumer Side: <span class="accent">The Inbox, Two Strategies</span></h2>
   <div class="code-columns">
     <div class="code-col">
       <h3>Ecto Strategy (Postgres)</h3>
@@ -1395,37 +1633,7 @@ w<!DOCTYPE html>
   </p>
   <div class="slide-footer">Distilling the Stream</div>
   <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
-  <!-- SPEAKER: "Same UUIDIdempotencyPlugin, two backends. Ecto strategy writes to a partitioned Postgres table — ~2ms, rock solid, PgPartman handles cleanup. Redis strategy for high-throughput topics where sub-millisecond matters. You choose per-topic." -->
-</div>
-
-<!-- ====================================================
-     SLIDE 15: Transactional Outbox + CDC
-     ==================================================== -->
-<div class="slide code-slide" id="slide-17">
-  <h2>The Other Side: <span class="accent">Transactional Outbox + CDC</span></h2>
-  <pre><span class="cm"># Domain change + event in ONE database transaction</span>
-<span class="kw">def</span> <span class="fn">confirm_appointment</span>(appointment, params) <span class="kw">do</span>
-  changeset = Appointment.confirm_changeset(appointment, params)
-
-  Multi.new()
-  <span class="op">|&gt;</span> Multi.update(<span class="nm">:appointment</span>, changeset)
-  <span class="op">|&gt;</span> Multi.run(<span class="nm">:outbox</span>, <span class="kw">fn</span> repo, <span class="hl">%{appointment: confirmed}</span> <span class="op">-&gt;</span>
-    repo.insert(<span class="hl">%OutboxEvent{</span>
-      <span class="hl">topic_name: <span class="st">"appointments.events-v1"</span>,</span>
-      <span class="hl">event_type: <span class="st">"appointment_confirmed"</span>,</span>
-      <span class="hl">partition_key: confirmed.provider_id,</span>
-      <span class="hl">payload: Protobuf.encode(confirmed)</span>
-    <span class="hl">}</span>)
-  <span class="kw">end</span>)
-  <span class="op">|&gt;</span> Repo.transaction()
-<span class="kw">end</span></pre>
-  <div class="callout" style="margin-top: 16px;">
-    <p>Debezium reads PostgreSQL WAL, publishes to Kafka. No polling. Zero coupling.</p>
-    <p>Your app writes to Postgres. Debezium does the rest — near real-time CDC.</p>
-  </div>
-  <div class="slide-footer">Distilling the Stream</div>
-  <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
-  <!-- SPEAKER: "We talked about the consumer side. Now the producer side. The outbox pattern: you never call Kafka from business logic. Write an OutboxEvent in the same transaction as your domain change. Debezium connects to the WAL, picks it up, publishes to Kafka. No polling, no cron jobs. pg_partman handles weekly partitions with 2-week retention." -->
+  <!-- SPEAKER: "Back to the Inbox box from the pipeline. Same UUIDIdempotencyPlugin, two backends. Ecto strategy writes to a partitioned Postgres table — ~2ms, rock solid, PgPartman handles cleanup. Redis strategy for high-throughput topics where sub-millisecond matters. You choose per-topic." -->
 </div>
 
 <!-- ====================================================
@@ -1433,8 +1641,8 @@ w<!DOCTYPE html>
      ==================================================== -->
 <div class="slide takeaway" id="slide-18">
   <h2>Pillar 2 Takeaway</h2>
-  <p class="takeaway-text">Idempotency is not an afterthought.<br>Design for it from day one.</p>
-  <p style="margin-top: 28px; font-size: 22px; color: #666;">
+  <p class="takeaway-text">Resilience is not an afterthought.<br>Design for it from day one.</p>
+  <p style="margin-top: 28px; font-size: 22px; color: #555;">
     Kafka guarantees at-least-once delivery.<br>
     Your application must guarantee idempotent processing.
   </p>
@@ -1552,12 +1760,6 @@ w<!DOCTYPE html>
       <div class="cm-cell">Team Owns It<br><span style="font-size:11px;opacity:0.6;text-transform:none;letter-spacing:0;">Readable &amp; forkable</span></div>
     </div>
     <div class="cm-row">
-      <div class="cm-cell cm-lib">Broadway</div>
-      <div class="cm-cell"><span class="cm-partial">~</span></div>
-      <div class="cm-cell"><span class="cm-yes">&#10003;</span></div>
-      <div class="cm-cell"><span class="cm-partial">~</span></div>
-    </div>
-    <div class="cm-row">
       <div class="cm-cell cm-lib">Brod</div>
       <div class="cm-cell"><span class="cm-no">&#10005;</span></div>
       <div class="cm-cell"><span class="cm-yes">&#10003;</span></div>
@@ -1578,7 +1780,7 @@ w<!DOCTYPE html>
   </div>
   <div class="slide-footer">Distilling the Stream</div>
   <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
-  <!-- SPEAKER: This was not an ideological choice. Brod is solid — but it's Erlang, and pre-LLM, reading Erlang source code required a specialist. That mattered for our team. Kaffe struggled with MSK broker restarts. KafkaEx: pure Elixir, the team could read and own every line. -->
+  <!-- SPEAKER: This was not an ideological choice. Brod is solid — but it's Erlang, and at the time our team didn't have active Erlang experience. That mattered for code review and ownership. In our MSK setup, Kaffe recovery didn't behave the way we needed. KafkaEx: pure Elixir, the team could read and own every line. -->
 </div>
 
 <!-- ====================================================
@@ -1586,20 +1788,20 @@ w<!DOCTYPE html>
      ==================================================== -->
 <div class="slide incident" id="slide-msk-incident">
   <div class="incident-label">The Real Problem</div>
-  <h2>MSK Restarts: What Actually Happens</h2>
+  <h2>MSK Restarts: What We Observed</h2>
   <ul style="margin-top: 24px;">
     <li>AWS MSK broker restarts during maintenance windows — routine, expected</li>
-    <li><strong style="color: var(--accent-red);">Kaffe consumers</strong> left in wrong state after restart — no visibility into what happened</li>
+    <li>In our setup, <strong style="color: var(--accent-red);">Kaffe consumers</strong> sometimes ended up in a state we couldn't introspect after the restart</li>
     <li>Consumer lag growing silently. No alerts — process was technically "alive" but not consuming</li>
     <li><strong style="color: var(--accent-green);">KafkaEx + OTP supervision:</strong> consumer process crashes cleanly, supervisor restarts it, reconnects automatically, telemetry reports the restart</li>
   </ul>
   <div class="callout" style="margin-top: 24px;">
-    <p>The difference: Kaffe tried to handle the error. KafkaEx let it crash.</p>
-    <p>One approach left consumers in limbo. The other recovered in seconds.</p>
+    <p>The difference we felt: one path tried to handle the error in-place. The other let it crash.</p>
+    <p>For our deploy, crashing and reconnecting recovered in seconds.</p>
   </div>
   <div class="slide-footer">Distilling the Stream</div>
   <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
-  <!-- SPEAKER: Anton. "This actually happened. MSK maintenance window. Kaffe consumers — technically alive, but not consuming. Lag growing, no alerts. With KafkaEx, the process crashes. Supervisor restarts it. Telemetry fires. We know exactly what happened, and the consumer is back in seconds." -->
+  <!-- SPEAKER: Anton. "This is what we saw in our MSK setup. Maintenance window. Kaffe consumers — technically alive, but not consuming. Lag growing, no alerts. With KafkaEx, the process crashes. Supervisor restarts it. Telemetry fires. We know exactly what happened, and the consumer is back in seconds. Your mileage may vary — this is our experience, not a universal claim." -->
 </div>
 
 <!-- ====================================================
@@ -1626,11 +1828,11 @@ w<!DOCTYPE html>
     This is not clever engineering. This is OTP doing what OTP does.
   </p>
   <div class="callout" style="margin-top: 12px;">
-    <p>Kaffe needed special recovery handlers for MSK restarts. We wrote zero recovery code.</p>
+    <p>On Kaffe we ended up writing recovery handlers for MSK restarts. On KafkaEx we wrote zero.</p>
   </div>
   <div class="slide-footer">Distilling the Stream</div>
   <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
-  <!-- SPEAKER: The supervisor IS the recovery strategy. Kaffe needed special handling for MSK restarts. We didn't write any recovery code — because we didn't have to. -->
+  <!-- SPEAKER: The supervisor IS the recovery strategy. In our Kaffe deploy we needed special handling for MSK restarts. With KafkaEx we didn't — OTP did it for us. -->
 </div>
 
 <!-- ====================================================
@@ -1639,7 +1841,7 @@ w<!DOCTYPE html>
 <div class="slide takeaway" id="slide-22">
   <h2>Pillar 3 Takeaway</h2>
   <p class="takeaway-text">We chose pure Elixir because<br>"let it crash" solved a real problem.</p>
-  <p style="margin-top: 28px; font-size: 22px; color: #666;">
+  <p style="margin-top: 28px; font-size: 22px; color: #555;">
     OTP supervision is not a trick. It's a production strategy.<br>
     And the team could read and own every line.
   </p>
@@ -2121,45 +2323,8 @@ crc     <span class="op">=</span> <span class="fn">:crc32cer.nif</span>(for_crc)
      ==================================================== -->
 <div class="slide takeaway" id="slide-25">
   <h2>Pillar 4 Takeaway</h2>
-  <p class="takeaway-text">Build on the protocol, not the deployment.<br>Infrastructure changes. Your code shouldn't have to.</p>
-  <p style="margin-top: 28px; font-size: 22px; color: #666;">
-    Diskless Kafka, tiered storage, KRaft — all free upgrades<br>
-    when your application speaks the standard protocol.
-  </p>
+  <p class="takeaway-text">Infrastructure changes.<br>Your code shouldn't have to.</p>
   <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
-</div>
-
-<!-- ====================================================
-     SLIDE 25: What Changes Monday (NEW)
-     ==================================================== -->
-<div class="slide" id="slide-26">
-  <h2>What Changes <span class="accent-warm">Monday</span></h2>
-  <div class="action-items">
-    <div class="action-item">
-      <span class="action-num">01</span>
-      <div>
-        <h3>Audit one consumer for idempotency</h3>
-        <p>Pick your most critical handler. Ask: "What happens if this message arrives twice?"</p>
-      </div>
-    </div>
-    <div class="action-item">
-      <span class="action-num">02</span>
-      <div>
-        <h3>Standardize your consumer supervisor pattern</h3>
-        <p>One pattern. One way to start a consumer. Document it. Enforce it.</p>
-      </div>
-    </div>
-    <div class="action-item">
-      <span class="action-num">03</span>
-      <div>
-        <h3>Watch the Kafkaesque repo</h3>
-        <p>Open-source drop coming. The patterns work even without the library.</p>
-      </div>
-    </div>
-  </div>
-  <div class="slide-footer">Distilling the Stream</div>
-  <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
-  <!-- SPEAKER: These are the three things you can start doing tomorrow. You don't need Kafkaesque for #1 and #2. -->
 </div>
 
 <!-- ====================================================
@@ -2215,11 +2380,22 @@ crc     <span class="op">=</span> <span class="fn">:crc32cer.nif</span>(for_crc)
      SLIDE 28: CTA + Q&A — narrative close + QR
      ==================================================== -->
 <div class="slide cta" id="slide-29">
-  <h2>Take These Home</h2>
-  <div class="cta-items">
-    <div class="cta-item">Design for idempotency <strong>from day one</strong></div>
-    <div class="cta-item">Let OTP do the recovery work — <strong>don't fight it</strong></div>
-    <div class="cta-item">Kafkaesque is being <strong>open-sourced</strong> — watch the repo</div>
+  <h2>Honorable <span class="accent">Mentions</span></h2>
+  <p style="font-size: 20px; color: var(--text-secondary); margin-top: -12px; margin-bottom: 22px;">None of this exists without the people maintaining the libraries underneath.</p>
+
+  <div style="display: flex; gap: 28px; margin-top: 4px;">
+    <div style="flex: 1; background: var(--bg-elevated); border-top: 4px solid var(--accent-warm); border-radius: 8px; padding: 18px 22px;">
+      <div style="font-family: var(--font-mono); font-size: 12px; font-weight: 700; letter-spacing: 0.15em; color: var(--accent-warm); text-transform: uppercase; margin-bottom: 10px;">kafka_ex maintainers</div>
+      <div style="font-size: 19px; color: var(--text-body); padding: 4px 0; line-height: 1.3;">Abejide Ayodele</div>
+      <div style="font-size: 19px; color: var(--text-body); padding: 4px 0; line-height: 1.3;">Dan Swain</div>
+      <div style="font-size: 19px; color: var(--text-body); padding: 4px 0; line-height: 1.3;">Jack Lund</div>
+      <div style="font-size: 19px; color: var(--text-body); padding: 4px 0; line-height: 1.3;">Joshua Scott</div>
+    </div>
+
+    <div style="flex: 1; background: var(--bg-elevated); border-top: 4px solid var(--accent); border-radius: 8px; padding: 18px 22px;">
+      <div style="font-family: var(--font-mono); font-size: 12px; font-weight: 700; letter-spacing: 0.15em; color: var(--accent); text-transform: uppercase; margin-bottom: 10px;">kayrock maintainers</div>
+      <div style="font-size: 19px; color: var(--text-body); padding: 4px 0; line-height: 1.3;">Dan Swain</div>
+    </div>
   </div>
   <div style="display: flex; align-items: center; gap: 48px; margin-top: 32px;">
     <div style="text-align: center;">
