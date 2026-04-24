@@ -1044,9 +1044,9 @@ w<!DOCTYPE html>
     <!-- Main stack -->
     <div style="flex: 1; display: flex; flex-direction: column; gap: 8px;">
 
-      <!-- Client Notifications -->
+      <!-- Application & Business Logic -->
       <div style="background: rgba(0,0,0,0.04); border: 2px solid rgba(0,0,0,0.12); border-radius: 10px; padding: 12px 22px;">
-        <div style="font-family: var(--font-display); font-size: 16px; font-weight: 700; color: var(--text-primary);">Client Notifications</div>
+        <div style="font-family: var(--font-display); font-size: 16px; font-weight: 700; color: var(--text-primary);">Application &amp; Business Logic</div>
         <div style="font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary); margin-top: 3px;">produce() / fetch() / create_topic() / consumer groups</div>
       </div>
 
@@ -1125,17 +1125,6 @@ w<!DOCTYPE html>
         </div>
       </div>
 
-      <!-- compile-time arrow -->
-      <div style="text-align: center; color: var(--accent-red); font-size: 11px; font-family: var(--font-mono); line-height: 1;">&#9660; <span style="color: var(--text-dim);">compile-time</span></div>
-
-      <!-- kpro_schema -->
-      <div style="background: rgba(92,232,180,0.06); border: 2px solid rgba(92,232,180,0.25); border-radius: 10px; padding: 8px 22px;">
-        <div style="display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;">
-          <span style="font-family: var(--font-mono); font-size: 16px; font-weight: 700; color: var(--accent-green);">kpro_schema</span>
-          <span style="font-family: var(--font-mono); font-size: 13px; color: var(--text-secondary);">(Erlang library &mdash; schemas extracted from Kafka Java source)</span>
-        </div>
-        <div style="font-family: var(--font-mono); font-size: 12px; color: var(--text-dim); margin-top: 6px;">req(:produce, 0) &#8594; [acks: :int16, timeout: :int32, topic_data: {:array, ...</div>
-      </div>
     </div>
 
     <!-- TCP arrows + Kafka Broker -->
@@ -1152,7 +1141,7 @@ w<!DOCTYPE html>
 
   <div class="slide-footer">Distilling the Stream</div>
   <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
-  <!-- SPEAKER: Start from the BOTTOM and tell the story from Kafka's perspective. Kafka speaks a binary wire protocol — that protocol is what kpro_schema captures, extracted straight from the Kafka Java source. Above it, the `protocol` layer turns those wire definitions into Elixir structs and (de)serializers so nothing in our app has to touch bytes. The `client` layer handles the actual Kafka conversation: TCP connections, broker discovery, partition routing, consumer-group coordination, version negotiation. On top sits our `framework` — plugins, DLQ, telemetry, health checks, idempotency — all the cross-cutting concerns we refuse to re-implement per service. And your business code? It just calls produce()/fetch() on a consumer group. Kafka sees a well-behaved client; your team sees one consistent API. -->
+  <!-- SPEAKER: Start from the BOTTOM and tell the story from Kafka's perspective. Kafka speaks a binary wire protocol — the `protocol` layer owns that wire format, turning it into Elixir structs and (de)serializers so nothing above has to touch bytes. The `client` layer handles the actual Kafka conversation: TCP connections, broker discovery, partition routing, consumer-group coordination, version negotiation. On top sits our `framework` — plugins, DLQ, telemetry, health checks, idempotency — all the cross-cutting concerns we refuse to re-implement per service. And your application? It just calls produce()/fetch() on a consumer group. Kafka sees a well-behaved client; your team sees one consistent API. -->
 </div>
 
 <!-- ====================================================
@@ -1210,7 +1199,7 @@ w<!DOCTYPE html>
       <div style="font-family: var(--font-display); font-size: 40px; font-weight: 800; color: var(--accent-red); min-width: 46px; line-height: 1;">4</div>
       <div style="flex: 1;">
         <div style="font-family: var(--font-display); font-size: 22px; font-weight: 700; color: var(--text-primary);">Build on the Protocol</div>
-        <div style="font-size: 17px; color: var(--text-secondary); margin-top: 2px;">Infrastructure changes &mdash; your code shouldn't have to.</div>
+        <div style="font-size: 17px; color: var(--text-secondary); margin-top: 2px;">When infrastructure changes, code shouldn't have to.</div>
       </div>
     </div>
 
@@ -1227,7 +1216,7 @@ w<!DOCTYPE html>
 <div class="slide divider" id="slide-7">
   <div class="pillar-number">1</div>
   <h2>DevEx &amp;<br>Velocity</h2>
-  <p class="divider-sub">Convention over configuration. At scale.</p>
+  <p class="divider-sub">Borrowed from Rails: convention over configuration.</p>
   <p class="divider-byline">— Piotr Rybarczyk</p>
   <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
   <!-- SPEAKER: Piotr takes over. "We solved the DX problem first. Because if engineers can't use the framework, nothing else matters." -->
@@ -1371,7 +1360,7 @@ w<!DOCTYPE html>
 <div class="slide divider" id="slide-13">
   <div class="pillar-number">2</div>
   <h2>Resilience via<br>Outbox, Inbox &amp; Idempotency</h2>
-  <p class="divider-sub">At-least-once delivery is a feature. Duplicates are not.</p>
+  <p class="divider-sub">Kafka delivers at-least-once. Duplicates come with the territory.</p>
   <p class="divider-byline">— Piotr Rybarczyk</p>
   <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
   <!-- SPEAKER: Piotr continues. Bridge from P1: "We solved the DX problem. But there's a more dangerous problem waiting — what happens when Kafka delivers a message twice?" -->
@@ -1655,7 +1644,7 @@ w<!DOCTYPE html>
 <div class="slide divider" id="slide-19">
   <div class="pillar-number">3</div>
   <h2>Why Pure<br>Elixir</h2>
-  <p class="divider-sub">A real decision. With real reasons.</p>
+  <p class="divider-sub">A considered decision.</p>
   <p class="divider-byline">— Anton Borisov</p>
   <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
   <!-- SPEAKER: Bridge from P2: "We had the patterns. But we needed the right foundation to run them on." Both speakers share this section. -->
@@ -1840,7 +1829,7 @@ w<!DOCTYPE html>
      ==================================================== -->
 <div class="slide takeaway" id="slide-22">
   <h2>Pillar 3 Takeaway</h2>
-  <p class="takeaway-text">We chose pure Elixir because<br>"let it crash" solved a real problem.</p>
+  <p class="takeaway-text">We chose pure Elixir because<br>"let it crash" solved our problems.</p>
   <p style="margin-top: 28px; font-size: 22px; color: #555;">
     OTP supervision is not a trick. It's a production strategy.<br>
     And the team could read and own every line.
@@ -1854,7 +1843,7 @@ w<!DOCTYPE html>
 <div class="slide divider" id="slide-23">
   <div class="pillar-number">4</div>
   <h2>Infrastructure<br>Optimization</h2>
-  <p class="divider-sub">Same protocol. Zero code changes.</p>
+  <p class="divider-sub">Same protocol and no business logic changes.</p>
   <p class="divider-byline">— Anton Borisov</p>
   <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
   <!-- SPEAKER: "We've talked about application-level patterns. Now let's zoom out. Kafka is evolving fast at the infrastructure layer — and because we built on the standard protocol, we get to ride that wave for free." -->
@@ -2323,7 +2312,7 @@ crc     <span class="op">=</span> <span class="fn">:crc32cer.nif</span>(for_crc)
      ==================================================== -->
 <div class="slide takeaway" id="slide-25">
   <h2>Pillar 4 Takeaway</h2>
-  <p class="takeaway-text">Infrastructure changes.<br>Your code shouldn't have to.</p>
+  <p class="takeaway-text">When infrastructure changes,<br>code shouldn't have to.</p>
   <img class="slide-logo" src="images/fresha-logo.png?v=3" alt="Fresha">
 </div>
 
@@ -2351,7 +2340,7 @@ crc     <span class="op">=</span> <span class="fn">:crc32cer.nif</span>(for_crc)
     <div class="summary-card">
       <div class="card-num">Pillar 4</div>
       <h3>Build on the protocol.</h3>
-      <p>Infrastructure changes. Your code doesn't.</p>
+      <p>When infrastructure changes, code shouldn't.</p>
     </div>
   </div>
   <div class="slide-footer">Distilling the Stream</div>
@@ -2397,17 +2386,17 @@ crc     <span class="op">=</span> <span class="fn">:crc32cer.nif</span>(for_crc)
       <div style="font-size: 19px; color: var(--text-body); padding: 4px 0; line-height: 1.3;">Dan Swain</div>
     </div>
   </div>
-  <div style="display: flex; align-items: center; gap: 48px; margin-top: 32px;">
-    <div style="text-align: center;">
-      <img src="images/qr-kayrock.svg" alt="Kayrock QR" style="width: 140px; height: 140px;">
+  <div style="display: flex; align-items: flex-start; justify-content: space-between; width: 100%; margin-top: 32px;">
+    <div style="flex: 1; text-align: center;">
+      <img src="images/qr-kayrock.svg" alt="Kayrock QR" style="width: 160px; height: 160px;">
       <div style="font-family: var(--font-mono); font-size: 14px; color: var(--text-secondary); margin-top: 8px;">kafkaex/kayrock</div>
     </div>
-    <div style="text-align: center;">
-      <img src="images/qr-kafka_ex.svg" alt="KafkaEx QR" style="width: 140px; height: 140px;">
+    <div style="flex: 1; text-align: center;">
+      <img src="images/qr-kafka_ex.svg" alt="KafkaEx QR" style="width: 160px; height: 160px;">
       <div style="font-family: var(--font-mono); font-size: 14px; color: var(--text-secondary); margin-top: 8px;">kafkaex/kafka_ex</div>
     </div>
-    <div style="text-align: center;">
-      <img src="images/qr-kafkaesque.svg" alt="Kafkaesque QR" style="width: 140px; height: 140px;">
+    <div style="flex: 1; text-align: center;">
+      <img src="images/qr-kafkaesque.svg" alt="Kafkaesque QR" style="width: 160px; height: 160px;">
       <div style="font-family: var(--font-mono); font-size: 14px; color: var(--accent); margin-top: 8px;">fresha/kafkaesque</div>
     </div>
   </div>

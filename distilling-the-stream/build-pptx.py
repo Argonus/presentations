@@ -73,9 +73,9 @@ def _is_blank(pil_image) -> bool:
     # downscale to cap work; convert to grayscale
     thumb = pil_image.convert("L").resize((160, 90), Image.BILINEAR)
     px = list(thumb.getdata())
-    # Background (--bg-deep = #0A0B12) maps to grayscale ~11.
+    # Background (--bg-deep = #FFFFFF) maps to grayscale 255.
     # Count pixels that differ from background by more than a tolerance.
-    non_bg = sum(1 for p in px if abs(p - 11) > 20)
+    non_bg = sum(1 for p in px if abs(p - 255) > 20)
     ratio = non_bg / len(px)
     return ratio < 0.01  # <1% of pixels carry any real content
 
